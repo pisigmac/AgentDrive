@@ -19,9 +19,17 @@ from typing import Any
 class VaultDaemon:
     """Harvests project context into vault on git events."""
 
-    def __init__(self, project_path: Path):
+    def __init__(self, project_path: Path, brain_path: Path | None = None):
         self.project = Path(project_path).resolve()
-        self.vault = self.project / ".vault"
+        self.brain_path = Path(brain_path).resolve() if brain_path else None
+        
+        if self.brain_path:
+            self.vault = self.brain_path / ".vault"
+            self.output_dir = self.brain_path / "projects" / self.project.name
+        else:
+            self.vault = self.project / ".vault"
+            self.output_dir = self.project / "projects"
+            
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
 
@@ -39,7 +47,10 @@ class VaultDaemon:
 
         # Ensure vault directories exist
         for d in ("projects", "commits", "decisions", "meetings", "sessions"):
-            (self.project / d).mkdir(exist_ok=True)
+            target = self.brain_path / d if self.brain_path else self.project / d
+            target.mkdir(parents=True, exist_ok=True)
+            
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         entries = 0
 
@@ -58,6 +69,15 @@ class VaultDaemon:
         self.state["last_harvest"] = start.isoformat()
         self.state["last_trigger"] = trigger
         self._save_state()
+
+        if entries > 0 and self.brain_path:
+            # Commit files into the Brain dev branch
+            subprocess.run(["git", "add", "."], cwd=self.brain_path, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"🤖 Auto-harvest: {self.project.name} ({entries} updates)"],
+                cwd=self.brain_path,
+                capture_output=True
+            )
 
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         print(f"[vault-daemon] {self.project.name}: {entries} entries, {elapsed:.2f}s ({trigger})")
@@ -124,11 +144,14 @@ class VaultDaemon:
             f"_(truncated — see full README in project root)_\n"
         )
 
-        dest = self.project / "projects" / f"{self.project.name}.md"
+        dest = self.output_dir / "README.md"
         return (
             1
             if self._write_if_changed(
-                dest, self._frontmatter(title, "project-summary", ["readme"], body)
+                dest,
+                self._frontmatter(
+                    f"{self.project.name} — Overview", "overview", ["readme"], body
+                ),
             )
             else 0
         )
@@ -170,7 +193,7 @@ class VaultDaemon:
             else:
                 body += f"**{k.title()}:** {v}\n\n"
 
-        dest = self.project / "projects" / "tech-stack.md"
+        dest = self.output_dir / "tech-stack.md"
         return (
             1
             if self._write_if_changed(
@@ -214,7 +237,7 @@ class VaultDaemon:
             "```\n" + "\n".join(lines[:200]) + "\n```\n"
         )
 
-        dest = self.project / "projects" / "structure.md"
+        dest = self.output_dir / "structure.md"
         return (
             1
             if self._write_if_changed(
@@ -262,7 +285,8 @@ class VaultDaemon:
         hash_, msg, author, date = parts
         day = date[:10]
 
-        dest = self.project / "commits" / f"{day}.md"
+        target_root = self.brain_path if self.brain_path else self.project
+        dest = target_root / "commits" / f"{day}.md"
 
         if dest.exists():
             existing = dest.read_text()
@@ -312,7 +336,7 @@ class VaultDaemon:
         if len(todos) > 50:
             body += f"\n_... and {len(todos) - 50} more_\n"
 
-        dest = self.project / "projects" / "todos.md"
+        dest = self.output_dir / "todos.md"
         return (
             1
             if self._write_if_changed(
@@ -354,7 +378,7 @@ class VaultDaemon:
         else:
             body += "✅ All checks passed.\n"
 
-        dest = self.project / "projects" / "health.md"
+        dest = self.output_dir / "health.md"
         return (
             1
             if self._write_if_changed(

@@ -932,21 +932,27 @@ def index() -> None:
 @click.option("--project", "-p", default=".", help="Project path to harvest")
 @click.option(
     "--trigger",
-    "-t",
     type=click.Choice(["commit", "push", "manual"]),
     default="manual",
     help="Trigger type",
 )
-def daemon(project: str, trigger: str) -> None:
+@click.option(
+    "--brain",
+    type=str,
+    default=None,
+    help="Path to Central Brain repository",
+)
+def daemon(project: str, trigger: str, brain: str | None) -> None:
     """Trigger event-driven context harvest (used by git hooks)."""
     project_path = Path(project).resolve()
+    brain_path = Path(brain).resolve() if brain else None
 
-    if not (project_path / ".vault" / "config.yaml").exists():
+    if not brain_path and not (project_path / ".vault" / "config.yaml").exists():
         console.print(f"[red]No vault found at {project_path}[/red]")
         console.print("[dim]Run 'vault init' first.[/dim]")
         sys.exit(1)
 
-    vd = VaultDaemon(project_path)
+    vd = VaultDaemon(project_path, brain_path=brain_path)
     vd.run(trigger)
 
 
