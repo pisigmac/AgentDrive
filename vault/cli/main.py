@@ -104,7 +104,7 @@ def init(path: str, name: str, force: bool) -> None:
 
     # Gitignore
     gitignore_path = vault_path / ".gitignore"
-    vault_ignores = "\n# AgentDrive\n.vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n"
+    vault_ignores = "\n# AgentDrive\n.vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n.session\n"
     if gitignore_path.exists():
         content = gitignore_path.read_text()
         if ".vault/staging/" not in content:
