@@ -6,7 +6,7 @@
 set -euo pipefail
 
 VAULT_VERSION="1.0.0"
-REPO_URL="https://github.com/jxnl/personal-monorepo-template"
+REPO_URL="https://github.com/pisigmac/AgentDrive.git"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -89,23 +89,24 @@ fi
 echo ""
 echo "[4/7] Installing vault CLI..."
 
+# Clone into a temporary directory, install, and clean up!
+INSTALL_DIR=$(mktemp -d)
+echo "    Cloning AgentDrive repository into temporary folder..."
+git clone -q "$REPO_URL" "$INSTALL_DIR"
+
 if [[ "$HAS_UV" == true ]]; then
-    echo "    Using uv (fast)"
-    uv pip install agentdrive --system 2>/dev/null || {
-        echo "    Installing from local source..."
-        # If running from cloned repo
-        if [[ -f "pyproject.toml" ]]; then
-            uv pip install -e . --system
-        fi
-    }
+    echo "    Using uv (fast) for installation"
+    uv pip install "$INSTALL_DIR" --system
+elif [[ "$HAS_PIP" == true ]]; then
+    echo "    Using pip for installation"
+    pip3 install "$INSTALL_DIR"
 else
-    pip3 install agentdrive 2>/dev/null || {
-        echo "    Installing from local source..."
-        if [[ -f "pyproject.toml" ]]; then
-            pip3 install -e .
-        fi
-    }
+    echo "ERROR: Could not find pip or uv to install the package."
+    exit 1
 fi
+
+echo "    Cleaning up temporary files..."
+rm -rf "$INSTALL_DIR"
 
 # ─── Interactive Directory Setup ───
 echo ""
