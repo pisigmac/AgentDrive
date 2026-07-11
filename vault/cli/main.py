@@ -96,6 +96,9 @@ def init(path: str, name: str, force: bool) -> None:
     # Write registry
     _write_registry(vault_path)
 
+    # Write GitHub Workflow
+    _write_github_workflow(vault_path)
+
     # Write cron
     _write_cron(vault_path)
 
@@ -128,6 +131,123 @@ def init(path: str, name: str, force: bool) -> None:
     console.print("  vault config     # Edit directory configuration")
     console.print("  vault mcp        # Install MCP server for Claude/Cursor")
     console.print("  vault daemon     # Manually trigger context harvest")
+
+
+@cli.command()
+@click.option("--brain", required=True, help="Path to the central AgentDrive Brain repository")
+@click.option("--path", default=".", help="Project path to link")
+def link(brain: str, path: str) -> None:
+    """Link a project to a Central Brain without creating local vault folders."""
+    import subprocess
+    from pathlib import Path
+
+    project_path = Path(path).resolve()
+    brain_path = Path(brain).resolve()
+
+    if not (brain_path / ".vault" / "config.yaml").exists():
+        console.print(
+            f"[red]Error:[/red] The specified brain path ({brain_path}) does not look like a valid AgentDrive Brain."
+        )
+        sys.exit(1)
+
+    console.print(
+        f"[bold green]Linking project at {project_path} to Brain at {brain_path}[/bold green]"
+    )
+
+    git_dir = project_path / ".git"
+    if not git_dir.exists():
+        subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
+        subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
+
+    subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
+    subprocess.run(["git", "checkout", "dev"], cwd=project_path, capture_output=True)
+
+    # Write Redirect AGENTS.md
+    agents_md = project_path / "AGENTS.md"
+    agents_md.write_text(f"""# Agent Governance & Context
+
+The master memory brain for this project is physically located at:
+`{brain_path}`
+
+**CRITICAL INSTRUCTION:**
+Before you analyze this codebase, write code, or execute commands, you MUST read your context, architecture decisions, and tech stack from:
+`{brain_path}/projects/{project_path.name}`
+""")
+
+    # Write GitHub Workflow
+    _write_github_workflow(project_path)
+
+    # Install linked git hooks
+    from vault.cli.main import install_hooks
+
+    install_hooks(project_path, python_executable=sys.executable, brain_path=str(brain_path))
+
+    # Update Brain config
+    from vault.core.config import VaultConfig, DirectoryConfig
+    brain_config = VaultConfig.load(brain_path / ".vault" / "config.yaml")
+    brain_config.directories.append(DirectoryConfig(**{
+        "name": project_path.name,
+        "description": f"Linked project: {project_path.name}",
+        "path": str(project_path),
+        "vault_path": str(brain_path / "projects" / project_path.name)
+    }))
+    brain_config.save(brain_path / ".vault" / "config.yaml")
+
+    console.print("[green]✓[/green] Project successfully linked to Central Brain!")
+    console.print("[dim]  AGENTS.md redirect created.[/dim]")
+    console.print("[dim]  Git hooks installed. Commits will route to the Brain.[/dim]")
+
+
+def _write_github_workflow(vault_path: Path) -> None:
+    """Install the daily auto-PR GitHub workflow."""
+    workflows_dir = vault_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+
+    # We copy the template from vault/templates/github/auto-pr.yml if available, otherwise write it directly
+    from vault import __file__ as vault_init
+
+    template_path = Path(vault_init).parent / "templates" / "github" / "auto-pr.yml"
+
+    if template_path.exists():
+        workflow_content = template_path.read_text()
+    else:
+        # Fallback raw content in case it isn't packaged properly
+        workflow_content = """name: "AgentDrive: Daily Auto-PR (dev -> main)"
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - id: check_diff
+        run: |
+          git fetch origin main
+          if git diff --quiet origin/main..dev; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+      - if: steps.check_diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_DATE=$(date +'%Y-%m-%d')
+          gh pr create --base main --head dev --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the dev sandbox into the main stable branch."
+"""
+
+    workflow_file = workflows_dir / "agentdrive-auto-pr.yml"
+    if not workflow_file.exists():
+        workflow_file.write_text(workflow_content)
 
 
 def _write_agents_md(vault_path: Path) -> None:
@@ -529,7 +649,7 @@ def registry(list_skills: bool, provider: str | None) -> None:
     vault_path = get_vault_path()
     reg = CapabilityRegistry(vault_path)
 
-    if list_skills or provider is not None or provider is None: # basically always run
+    if list_skills or provider is not None or provider is None:  # basically always run
         skills = reg.discover(provider=provider)
 
         if not skills:

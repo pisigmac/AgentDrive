@@ -503,7 +503,7 @@ class VaultDaemon:
         return True
 
 
-def install_hooks(project_path: Path, python_executable: str | None = None) -> None:
+def install_hooks(project_path: Path, python_executable: str | None = None, brain_path: str | None = None) -> None:
     """Install post-commit and post-push hooks into a project's .git/hooks/."""
     project_path = Path(project_path).resolve()
     git_dir = project_path / ".git"
@@ -516,7 +516,8 @@ def install_hooks(project_path: Path, python_executable: str | None = None) -> N
 
     python = python_executable or sys.executable
     # Use python -m vault.cli.main daemon so it works even if 'vault' isn't in PATH
-    cmd = f'{python} -m vault.cli.main daemon --project "{project_path}" --trigger'
+    brain_arg = f' --brain "{brain_path}"' if brain_path else ""
+    cmd = f'{python} -m vault.cli.main daemon --project "{project_path}"{brain_arg} --trigger'
 
     # post-commit: fast — only harvest the new commit
     post_commit = hooks_dir / "post-commit"
