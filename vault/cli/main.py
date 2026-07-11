@@ -170,33 +170,50 @@ def link(brain: str, path: str) -> None:
     subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
     subprocess.run(["git", "checkout", "dev"], cwd=project_path, capture_output=True)
 
-    # Generate AGENTS.md redirect
+    # Generate global agentdrive registry
+    global_dir = Path.home() / ".agentdrive"
+    global_dir.mkdir(parents=True, exist_ok=True)
+    global_config_path = global_dir / "config.json"
+    
+    import json
+    global_config = {"links": {}}
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+        except Exception:
+            pass
+            
+    if "links" not in global_config:
+        global_config["links"] = {}
+        
+    global_config["links"][str(project_path)] = str(brain_path)
+    global_config_path.write_text(json.dumps(global_config, indent=2))
+    
+    # Create symlink for AI tools
+    brains_dir = global_dir / "brains"
+    brains_dir.mkdir(parents=True, exist_ok=True)
+    symlink_path = brains_dir / brain_path.name
+    if symlink_path.exists() or symlink_path.is_symlink():
+        symlink_path.unlink()
+    symlink_path.symlink_to(brain_path)
+
+    # Append generic instruction to AGENTS.md
     agents_md = project_path / "AGENTS.md"
+    generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
     
     if agents_md.exists():
-        brain_project_dir = brain_path / "projects" / project_path.name
-        brain_project_dir.mkdir(parents=True, exist_ok=True)
-        backup_md = brain_project_dir / "LOCAL_AGENTS.md"
-        backup_md.write_text(agents_md.read_text())
-        console.print(f"[dim]  Migrated existing AGENTS.md to {backup_md}[/dim]")
-
-    agents_md.write_text(f"""# Agent Governance & Context
-
-The master memory brain for this project is physically located at:
-`{brain_path}`
-
-**CRITICAL INSTRUCTION:**
-Before you analyze this codebase, write code, or execute commands, you MUST read your context, architecture decisions, and tech stack from:
-`{brain_path}/projects/{project_path.name}`
-""")
+        content = agents_md.read_text()
+        if "Global system memory is tracked securely" not in content:
+            agents_md.write_text(content.rstrip() + generic_text)
+    else:
+        agents_md.write_text(f"# Agent Governance & Context{generic_text}")
 
     # Write GitHub Workflow
     _write_github_workflow(project_path)
 
-    # Install linked git hooks
-    from vault.cli.main import install_hooks
-
-    install_hooks(project_path, python_executable=sys.executable, brain_path=str(brain_path))
+    # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
+    from vault.core.daemon import install_hooks
+    install_hooks(project_path, python_executable=sys.executable)
 
     # Update Brain config
     from vault.core.config import VaultConfig, DirectoryConfig
@@ -209,9 +226,9 @@ Before you analyze this codebase, write code, or execute commands, you MUST read
     }))
     brain_config.save(brain_path / ".vault" / "config.yaml")
 
-    console.print("[green]✓[/green] Project successfully linked to Central Brain!")
-    console.print("[dim]  AGENTS.md redirect created.[/dim]")
-    console.print("[dim]  Git hooks installed. Commits will route to the Brain.[/dim]")
+    console.print("[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!")
+    console.print("[dim]  Local AGENTS.md updated safely.[/dim]")
+    console.print("[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]")
 
 
 def _write_github_workflow(vault_path: Path) -> None:
@@ -946,6 +963,18 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
     """Trigger event-driven context harvest (used by git hooks)."""
     project_path = Path(project).resolve()
     brain_path = Path(brain).resolve() if brain else None
+
+    if not brain_path:
+        global_config_path = Path.home() / ".agentdrive" / "config.json"
+        if global_config_path.exists():
+            import json
+            try:
+                global_config = json.loads(global_config_path.read_text())
+                links = global_config.get("links", {})
+                if str(project_path) in links:
+                    brain_path = Path(links[str(project_path)]).resolve()
+            except Exception:
+                pass
 
     if not brain_path and not (project_path / ".vault" / "config.yaml").exists():
         console.print(f"[red]No vault found at {project_path}[/red]")
