@@ -1,4 +1,4 @@
-"""Personal Vault CLI — Filesystem-as-Memory for AI Agents."""
+"""AgentDrive CLI — Filesystem-as-Memory for AI Agents."""
 
 from __future__ import annotations
 
@@ -43,14 +43,14 @@ def get_vault_path() -> Path:
 @click.group()
 @click.version_option(version="1.0.0")
 def cli():
-    """Personal Vault — Filesystem-as-Memory for AI Agents."""
+    """AgentDrive — Filesystem-as-Memory for AI Agents."""
     pass
 
 
 # ─── INIT ───
 @cli.command()
 @click.argument("path", default=".", type=click.Path(exists=False))
-@click.option("--name", default="personal-vault", help="Vault name")
+@click.option("--name", default="agentdrive", help="Vault name")
 @click.option("--force", is_flag=True, help="Overwrite existing vault")
 def init(path: str, name: str, force: bool) -> None:
     """Initialize a new vault in the given directory."""
@@ -66,7 +66,7 @@ def init(path: str, name: str, force: bool) -> None:
     if not git_dir.exists():
         subprocess.run(["git", "init", "-b", "main"], cwd=vault_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=vault_path)
-        subprocess.run(["git", "config", "user.name", "Personal Vault"], cwd=vault_path)
+        subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=vault_path)
 
     # Create branches
     subprocess.run(["git", "checkout", "-b", "dev"], cwd=vault_path, capture_output=True)
@@ -132,7 +132,7 @@ def init(path: str, name: str, force: bool) -> None:
 
 def _write_agents_md(vault_path: Path) -> None:
     """Write root AGENTS.md."""
-    content = """# Personal Vault — Agent Governance
+    content = """# AgentDrive — Agent Governance
 
 ## Scope
 This AGENTS.md governs ALL AI providers (Claude, Codex, Cursor, OpenAI, etc.)
@@ -648,7 +648,7 @@ def mcp(install: bool, run_server: bool, port: int) -> None:
                 with open(claude_config) as f:
                     existing = json.load(f)
                 existing.setdefault("mcpServers", {})
-                existing["mcpServers"]["personal-vault"] = {
+                existing["mcpServers"]["agentdrive"] = {
                     "command": "vault",
                     "args": ["mcp", "--run"],
                     "env": {"VAULT_PATH": str(vault_path)},
@@ -666,7 +666,7 @@ def mcp(install: bool, run_server: bool, port: int) -> None:
             server.run()
         except ImportError:
             console.print("[red]MCP dependencies not installed.[/red]")
-            console.print("[dim]Install with: pip install personal-vault[mcp][/dim]")
+            console.print("[dim]Install with: pip install agentdrive[mcp][/dim]")
 
 
 def _get_mcp_config(vault_path: Path) -> str:
@@ -675,7 +675,7 @@ def _get_mcp_config(vault_path: Path) -> str:
 
     config = {
         "mcpServers": {
-            "personal-vault": {
+            "agentdrive": {
                 "command": "vault",
                 "args": ["mcp", "--run"],
                 "env": {"VAULT_PATH": str(vault_path)},

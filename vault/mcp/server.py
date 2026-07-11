@@ -1,4 +1,4 @@
-"""MCP Server for Personal Vault — Any provider can access."""
+"""MCP Server for AgentDrive — Any provider can access."""
 
 from __future__ import annotations
 
@@ -36,12 +36,12 @@ class VaultMCPServer:
             from mcp.server import Server
             from mcp.types import Tool, TextContent  # noqa: F401
 
-            self.server = Server("personal-vault")
+            self.server = Server("agentdrive")
             self._register_tools()
             self.server.run()
         except ImportError:
             print("ERROR: MCP dependencies not installed.", file=os.sys.stderr)
-            print("Install with: pip install personal-vault[mcp]", file=os.sys.stderr)
+            print("Install with: pip install agentdrive[mcp]", file=os.sys.stderr)
             raise
 
     def _register_tools(self) -> None:

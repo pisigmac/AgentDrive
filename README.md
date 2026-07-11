@@ -1,8 +1,8 @@
-# 🧠 Personal Vault
+# 🧠 AgentDrive
 
 **Give your AI Agents a Git-Native, Infinite Memory Drive.**
 
-Say goodbye to black-box vector databases and locked-in memory platforms. **Personal Vault** turns your local filesystem into a highly structured, self-updating, markdown-based memory system. Whether you use Claude, Cursor, OpenAI, or a custom script, your agents can seamlessly read, write, and reason over an ever-evolving context that lives right alongside your code.
+Say goodbye to black-box vector databases and locked-in memory platforms. **AgentDrive** turns your local filesystem into a highly structured, self-updating, markdown-based memory system. Whether you use Claude, Cursor, OpenAI, or a custom script, your agents can seamlessly read, write, and reason over an ever-evolving context that lives right alongside your code.
 
 ---
 
@@ -11,15 +11,15 @@ Say goodbye to black-box vector databases and locked-in memory platforms. **Pers
 ### One-Command Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/pisigmac/personal-vault/main/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/pisigmac/agentdrive/main/setup.sh | bash
 ```
 
 Or manually:
 
 ```bash
 # 1. Install the CLI globally
-git clone https://github.com/pisigmac/personal-vault.git
-cd personal-vault
+git clone https://github.com/pisigmac/agentdrive.git
+cd agentdrive
 pip install -e .
 
 # 2. Go to your own project and initialize a vault
@@ -294,8 +294,8 @@ Auto-archive and health checks run weekly via GitHub Actions:
 
 ```bash
 # Clone
-git clone https://github.com/pisigmac/personal-vault.git
-cd personal-vault
+git clone https://github.com/pisigmac/agentdrive.git
+cd agentdrive
 
 # Install
 pip install -e ".[dev]"

@@ -173,7 +173,7 @@ class VaultSearch:
             return results
         except ImportError:
             console.print(
-                "[yellow]sentence-transformers not installed. Install with: pip install personal-vault[semantic][/yellow]"
+                "[yellow]sentence-transformers not installed. Install with: pip install agentdrive[semantic][/yellow]"
             )
             return results
 

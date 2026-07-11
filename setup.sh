@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Personal Vault Setup Script
-# One-command install: curl -sSL https://raw.githubusercontent.com/you/personal-vault/main/setup.sh | bash
-# Or: wget -qO- https://raw.githubusercontent.com/you/personal-vault/main/setup.sh | bash
+# AgentDrive Setup Script
+# One-command install: curl -sSL https://raw.githubusercontent.com/you/agentdrive/main/setup.sh | bash
+# Or: wget -qO- https://raw.githubusercontent.com/you/agentdrive/main/setup.sh | bash
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ REPO_URL="https://github.com/jxnl/personal-monorepo-template"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           Personal Vault Setup v${VAULT_VERSION}               ║"
+echo "║           AgentDrive Setup v${VAULT_VERSION}               ║"
 echo "║     Filesystem-as-Memory for AI Agents (Any Provider)      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
@@ -47,7 +47,7 @@ fi
 
 # ─── Get Vault Path ───
 echo "[2/7] Where should your vault live?"
-DEFAULT_VAULT="$HOME/personal-vault"
+DEFAULT_VAULT="$HOME/agentdrive"
 read -rp "  Path [${DEFAULT_VAULT}]: " VAULT_PATH
 VAULT_PATH=${VAULT_PATH:-$DEFAULT_VAULT}
 VAULT_PATH=$(eval echo "$VAULT_PATH")
@@ -75,7 +75,7 @@ echo "[3/7] Initializing git repository..."
 if [[ "$ADOPTING" == false ]]; then
     git init -b main
     git config user.email "vault@localhost"
-    git config user.name "Personal Vault"
+    git config user.name "AgentDrive"
 fi
 
 # Create dev branch if not exists
@@ -91,7 +91,7 @@ echo "[4/7] Installing vault CLI..."
 
 if [[ "$HAS_UV" == true ]]; then
     echo "    Using uv (fast)"
-    uv pip install personal-vault --system 2>/dev/null || {
+    uv pip install agentdrive --system 2>/dev/null || {
         echo "    Installing from local source..."
         # If running from cloned repo
         if [[ -f "pyproject.toml" ]]; then
@@ -99,7 +99,7 @@ if [[ "$HAS_UV" == true ]]; then
         fi
     }
 else
-    pip3 install personal-vault 2>/dev/null || {
+    pip3 install agentdrive 2>/dev/null || {
         echo "    Installing from local source..."
         if [[ -f "pyproject.toml" ]]; then
             pip3 install -e .
@@ -111,7 +111,7 @@ fi
 echo ""
 echo "[5/7] Configuring contextual directories..."
 echo ""
-echo "    Personal Vault organizes your life into contextual buckets."
+echo "    AgentDrive organizes your life into contextual buckets."
 echo "    You can map your EXISTING directories, or use our defaults."
 echo ""
 
@@ -153,7 +153,7 @@ fi
 # Build config
 CONFIG_FILE="$CONFIG_DIR/directories.yaml"
 cat > "$CONFIG_FILE" << 'HEADER'
-# Personal Vault Directory Configuration
+# AgentDrive Directory Configuration
 # Each entry maps a contextual bucket to a filesystem path
 # You can add, remove, or reorder these anytime.
 
@@ -266,7 +266,7 @@ EOF
 echo "    Writing AGENTS.md governance..."
 
 cat > "$VAULT_PATH/AGENTS.md" << 'EOF'
-# Personal Vault — Agent Governance
+# AgentDrive — Agent Governance
 
 ## Scope
 This AGENTS.md governs ALL AI providers (Claude, Codex, Cursor, OpenAI, etc.) 
@@ -770,7 +770,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install vault
-        run: pip install personal-vault
+        run: pip install agentdrive
       
       - name: Run archive
         run: vault archive --threshold 120
