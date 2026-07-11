@@ -280,6 +280,10 @@ jobs:
     workflow_file = workflows_dir / "agentdrive-auto-pr.yml"
     if not workflow_file.exists():
         workflow_file.write_text(workflow_content)
+        
+        # Automatically stage it so the user doesn't forget
+        import subprocess
+        subprocess.run(["git", "add", ".github/workflows/agentdrive-auto-pr.yml"], cwd=vault_path, capture_output=True)
 
 
 def _write_agents_md(vault_path: Path) -> None:
