@@ -170,8 +170,16 @@ def link(brain: str, path: str) -> None:
     subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
     subprocess.run(["git", "checkout", "dev"], cwd=project_path, capture_output=True)
 
-    # Write Redirect AGENTS.md
+    # Generate AGENTS.md redirect
     agents_md = project_path / "AGENTS.md"
+    
+    if agents_md.exists():
+        brain_project_dir = brain_path / "projects" / project_path.name
+        brain_project_dir.mkdir(parents=True, exist_ok=True)
+        backup_md = brain_project_dir / "LOCAL_AGENTS.md"
+        backup_md.write_text(agents_md.read_text())
+        console.print(f"[dim]  Migrated existing AGENTS.md to {backup_md}[/dim]")
+
     agents_md.write_text(f"""# Agent Governance & Context
 
 The master memory brain for this project is physically located at:
