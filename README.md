@@ -1,8 +1,8 @@
-# Personal Vault
+# 🧠 Personal Vault
 
-**Filesystem-as-Memory for AI Agents. Any provider.**
+**Give your AI Agents a Git-Native, Infinite Memory Drive.**
 
-Personal Vault is a git-native, markdown-based memory system for AI agents. Instead of vector databases or proprietary memory stores, your agent's context lives in a structured filesystem that any LLM provider can read, write, and reason about.
+Say goodbye to black-box vector databases and locked-in memory platforms. **Personal Vault** turns your local filesystem into a highly structured, self-updating, markdown-based memory system. Whether you use Claude, Cursor, OpenAI, or a custom script, your agents can seamlessly read, write, and reason over an ever-evolving context that lives right alongside your code.
 
 ---
 
@@ -11,15 +11,33 @@ Personal Vault is a git-native, markdown-based memory system for AI agents. Inst
 ### One-Command Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/you/personal-vault/main/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/pisigmac/personal-vault/main/setup.sh | bash
 ```
 
 Or manually:
 
 ```bash
-pip install personal-vault
+# 1. Install the CLI globally
+git clone https://github.com/pisigmac/personal-vault.git
+cd personal-vault
+pip install -e .
+
+# 2. Go to your own project and initialize a vault
+cd ~/my-project
 vault init
 ```
+
+### Adopting Existing Projects
+
+You can run `vault init` safely inside projects that already have code and a `.git` repository! Here is what happens:
+- It detects your existing `.git` repo and gracefully creates a new `dev` branch for AI agents to write to.
+- It safely scaffolds the `.vault/` configuration and templates.
+- **Tip:** `vault init` commits these setup files automatically. Ensure your working tree is clean before running it to avoid bundling uncommitted changes into the initialization commit.
+- **Auto-Summarization:** The vault won't scan your codebase immediately on init. Instead, a background daemon will automatically wake up and summarize your tech stack, folder structure, open TODOs, and health status **the very next time you make a commit**. 
+- To force an immediate summarization without waiting for a commit, simply run:
+  ```bash
+  vault daemon
+  ```
 
 ### What You Get
 
@@ -122,8 +140,8 @@ vault mcp --run                  # Start MCP server
 
 ```bash
 # Initialize
-vault init                       # Create new vault
-vault init --path ~/my-vault     # Custom path
+vault init                       # Create new vault in current directory
+vault init ~/my-vault --name my-vault # Custom path and name
 
 # Status & Health
 vault status                     # Git + health overview
@@ -152,6 +170,7 @@ vault cron --edit                # Edit cron.yaml
 # MCP
 vault mcp --install              # Auto-configure Claude/Cursor
 vault mcp --run                  # Start stdio server
+
 
 # Create Entries
 vault new project "NeeVibe"     # From template
@@ -238,13 +257,13 @@ Auto-archive and health checks run weekly via GitHub Actions:
               │   (vault.mcp)       │
               └─────────────────────┘
                           │
-              ┌───────────┼───────────┐
-              ▼           ▼           ▼
-        ┌─────────┐  ┌─────────┐  ┌─────────┐
-        │ Search  │  │ Archive │  │  Git    │
-        │ Engine  │  │ Engine  │  │ Workflow│
-        │(.index) │  │(.archive│  │(dev/main│
-        └─────────┘  │ 120d)   │  │   PR)   │
+              ┌─────────┼───────────┼───────────┐
+              ▼           ▼           ▼           ▼
+        ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
+        │ Search  │  │ Archive │  │  Git    │  │ Daemon  │
+        │ Engine  │  │ Engine  │  │ Workflow│  │ (Hooks &│
+        │(.index) │  │(.archive│  │(dev/main│  │ Harvest)│
+        └─────────┘  │ 120d)   │  │   PR)   │  └─────────┘
                    └─────────┘  └─────────┘
                           │
                           ▼
