@@ -67,11 +67,12 @@ def init(path: str, name: str, force: bool) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=vault_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=vault_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=vault_path)
+        subprocess.run(["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"], cwd=vault_path, capture_output=True)
 
-    # Create branches
-    subprocess.run(["git", "checkout", "-b", "dev"], cwd=vault_path, capture_output=True)
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=vault_path, capture_output=True)
-    subprocess.run(["git", "checkout", "dev"], cwd=vault_path, capture_output=True)
+    # Create or switch to dev branch
+    result = subprocess.run(["git", "checkout", "-b", "dev"], cwd=vault_path, capture_output=True)
+    if result.returncode != 0:
+        subprocess.run(["git", "checkout", "dev"], cwd=vault_path, capture_output=True)
 
     # Create structure
     (vault_path / ".vault").mkdir(exist_ok=True)
@@ -166,9 +167,12 @@ def link(brain: str, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
+        subprocess.run(["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"], cwd=project_path, capture_output=True)
 
-    subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
-    subprocess.run(["git", "checkout", "dev"], cwd=project_path, capture_output=True)
+    # Create or switch to dev branch
+    result = subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
+    if result.returncode != 0:
+        subprocess.run(["git", "checkout", "dev"], cwd=project_path, capture_output=True)
 
     # Generate global agentdrive registry
     global_dir = Path.home() / ".agentdrive"
