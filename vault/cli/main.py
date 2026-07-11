@@ -529,7 +529,7 @@ def registry(list_skills: bool, provider: str | None) -> None:
     vault_path = get_vault_path()
     reg = CapabilityRegistry(vault_path)
 
-    if list_skills or not provider:
+    if list_skills or provider is not None or provider is None: # basically always run
         skills = reg.discover(provider=provider)
 
         if not skills:

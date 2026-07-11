@@ -21,6 +21,7 @@ class SkillOutput:
     type: str
     path_template: str | None = None
     schema: str | None = None
+    path: str | None = None
 
 
 @dataclass
