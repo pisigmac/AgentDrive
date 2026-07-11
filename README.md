@@ -39,6 +39,17 @@ You can run `vault init` safely inside projects that already have code and a `.g
   vault daemon
   ```
 
+### The Central Brain Architecture (Multi-Repo)
+
+If you have multiple projects and don't want to clutter them with `.vault/` folders, you can use the Central Brain architecture.
+
+1. **Create the Brain:** Pick a central folder (e.g., `~/AgentDriveBrain`) and run `vault init`.
+2. **Link your Projects:** Navigate to your pure code repositories and run `vault link --brain ~/AgentDriveBrain`.
+
+This drops a tiny `AGENTS.md` redirect file in your codebase that instructs AI agents to read context from the Central Brain. Every time you commit, the local daemon wakes up and routes all the generated context directly into your Brain repository!
+
+[Read the full Architecture Reference here.](docs/central_brain_architecture.md)
+
 ### What You Get
 
 ```

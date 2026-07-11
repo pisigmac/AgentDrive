@@ -103,9 +103,16 @@ def init(path: str, name: str, force: bool) -> None:
     _write_cron(vault_path)
 
     # Gitignore
-    (vault_path / ".gitignore").write_text(
-        ".vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n.DS_Store\nThumbs.db\n"
-    )
+    gitignore_path = vault_path / ".gitignore"
+    vault_ignores = "\n# AgentDrive\n.vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n"
+    if gitignore_path.exists():
+        content = gitignore_path.read_text()
+        if ".vault/staging/" not in content:
+            with open(gitignore_path, "a") as f:
+                f.write(vault_ignores)
+    else:
+        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.env\n.DS_Store\nThumbs.db\n"
+        gitignore_path.write_text(standard_ignores + vault_ignores)
 
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
