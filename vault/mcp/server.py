@@ -17,7 +17,7 @@ from vault.core.registry import CapabilityRegistry
 
 class VaultMCPServer:
     """MCP server exposing vault operations to any LLM client."""
-    
+
     def __init__(self, vault_path: str | None = None):
         if vault_path:
             self.vault_path = Path(vault_path)
@@ -27,15 +27,15 @@ class VaultMCPServer:
                 self.vault_path = Path(env_path)
             else:
                 self.vault_path = find_vault_root()
-        
+
         self.config = VaultConfig.load(self.vault_path / ".vault" / "config.yaml")
-    
+
     def run(self) -> None:
         """Run MCP server over stdio (default for Claude/Cursor)."""
         try:
             from mcp.server import Server
-            from mcp.types import Tool, TextContent
-            
+            from mcp.types import Tool, TextContent  # noqa: F401
+
             self.server = Server("personal-vault")
             self._register_tools()
             self.server.run()
@@ -43,11 +43,11 @@ class VaultMCPServer:
             print("ERROR: MCP dependencies not installed.", file=os.sys.stderr)
             print("Install with: pip install personal-vault[mcp]", file=os.sys.stderr)
             raise
-    
+
     def _register_tools(self) -> None:
         """Register all vault tools with MCP server."""
         from mcp.types import Tool, TextContent
-        
+
         @self.server.list_tools()
         async def list_tools():
             return [
@@ -58,11 +58,19 @@ class VaultMCPServer:
                         "type": "object",
                         "properties": {
                             "query": {"type": "string", "description": "Search query"},
-                            "directories": {"type": "array", "items": {"type": "string"}, "description": "Limit to specific directories (projects, people, etc.)"},
-                            "limit": {"type": "integer", "default": 10, "description": "Max results to return"},
+                            "directories": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Limit to specific directories (projects, people, etc.)",
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "default": 10,
+                                "description": "Max results to return",
+                            },
                         },
-                        "required": ["query"]
-                    }
+                        "required": ["query"],
+                    },
                 ),
                 Tool(
                     name="vault_read",
@@ -70,10 +78,13 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "path": {"type": "string", "description": "Relative path from vault root (e.g., projects/neevibe.md)"}
+                            "path": {
+                                "type": "string",
+                                "description": "Relative path from vault root (e.g., projects/neevibe.md)",
+                            }
                         },
-                        "required": ["path"]
-                    }
+                        "required": ["path"],
+                    },
                 ),
                 Tool(
                     name="vault_write",
@@ -81,12 +92,22 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "path": {"type": "string", "description": "Relative path from vault root"},
-                            "content": {"type": "string", "description": "Full markdown content with frontmatter"},
-                            "agent": {"type": "string", "default": "mcp", "description": "Agent identifier for audit trail"}
+                            "path": {
+                                "type": "string",
+                                "description": "Relative path from vault root",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "Full markdown content with frontmatter",
+                            },
+                            "agent": {
+                                "type": "string",
+                                "default": "mcp",
+                                "description": "Agent identifier for audit trail",
+                            },
                         },
-                        "required": ["path", "content"]
-                    }
+                        "required": ["path", "content"],
+                    },
                 ),
                 Tool(
                     name="vault_archive",
@@ -94,19 +115,23 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "threshold_days": {"type": "integer", "default": 120, "description": "Days before archiving"}
-                        }
-                    }
+                            "threshold_days": {
+                                "type": "integer",
+                                "default": 120,
+                                "description": "Days before archiving",
+                            }
+                        },
+                    },
                 ),
                 Tool(
                     name="vault_health",
                     description="Run full vault health check. Returns errors, warnings, and suggestions.",
-                    inputSchema={"type": "object", "properties": {}}
+                    inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
                     name="vault_status",
                     description="Get vault git status: branch, staged files, last commit.",
-                    inputSchema={"type": "object", "properties": {}}
+                    inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
                     name="vault_skills",
@@ -114,9 +139,12 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "provider": {"type": "string", "description": "Filter by provider (claude, codex, cursor, openai)"}
-                        }
-                    }
+                            "provider": {
+                                "type": "string",
+                                "description": "Filter by provider (claude, codex, cursor, openai)",
+                            }
+                        },
+                    },
                 ),
                 Tool(
                     name="vault_new",
@@ -124,12 +152,26 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "type": {"type": "string", "enum": ["project", "person", "meeting", "decision", "goal", "experiment"], "description": "Entry type"},
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "project",
+                                    "person",
+                                    "meeting",
+                                    "decision",
+                                    "goal",
+                                    "experiment",
+                                ],
+                                "description": "Entry type",
+                            },
                             "name": {"type": "string", "description": "Entry name/title"},
-                            "content": {"type": "string", "description": "Optional custom content (uses template if omitted)"}
+                            "content": {
+                                "type": "string",
+                                "description": "Optional custom content (uses template if omitted)",
+                            },
                         },
-                        "required": ["type", "name"]
-                    }
+                        "required": ["type", "name"],
+                    },
                 ),
                 Tool(
                     name="vault_related",
@@ -137,13 +179,16 @@ class VaultMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "path": {"type": "string", "description": "Relative path to find related content for"}
+                            "path": {
+                                "type": "string",
+                                "description": "Relative path to find related content for",
+                            }
                         },
-                        "required": ["path"]
-                    }
+                        "required": ["path"],
+                    },
                 ),
             ]
-        
+
         @self.server.call_tool()
         async def call_tool(name: str, arguments: dict):
             if name == "vault_search":
@@ -166,14 +211,13 @@ class VaultMCPServer:
                 return await self._handle_related(arguments)
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
-    
+
     async def _handle_search(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         searcher = VaultSearch(self.vault_path)
         results = searcher.search(
-            args["query"],
-            directories=args.get("directories"),
-            limit=args.get("limit", 10)
+            args["query"], directories=args.get("directories"), limit=args.get("limit", 10)
         )
         output = {
             "query": args["query"],
@@ -182,34 +226,35 @@ class VaultMCPServer:
                     "path": r.path,
                     "score": round(r.score, 2),
                     "snippet": r.snippet,
-                    "metadata": r.metadata
+                    "metadata": r.metadata,
                 }
                 for r in results
-            ]
+            ],
         }
         return [TextContent(type="text", text=json.dumps(output, indent=2))]
-    
+
     async def _handle_read(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         filepath = self.vault_path / args["path"]
         if not filepath.exists():
             return [TextContent(type="text", text=f"File not found: {args['path']}")]
         content = filepath.read_text(encoding="utf-8")
         return [TextContent(type="text", text=content)]
-    
+
     async def _handle_write(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         git = VaultGit(self.vault_path)
         path = Path(args["path"])
         content = args["content"]
         agent = args.get("agent", "mcp")
-        
+
         result = git.stage_write(path, content, agent)
         pr = git.raise_pr(
-            title=f"[{agent}] Update {path.name}",
-            description=f"Staged by {agent} via MCP"
+            title=f"[{agent}] Update {path.name}", description=f"Staged by {agent} via MCP"
         )
-        
+
         output = {
             "staged": {
                 "branch": result.branch,
@@ -222,30 +267,34 @@ class VaultMCPServer:
                 "to": pr.to_branch,
                 "status": pr.status,
             },
-            "note": "This write is staged on the 'dev' branch. A human must merge the PR to promote to 'main'."
+            "note": "This write is staged on the 'dev' branch. A human must merge the PR to promote to 'main'.",
         }
         return [TextContent(type="text", text=json.dumps(output, indent=2))]
-    
+
     async def _handle_archive(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         engine = ArchiveEngine(self.vault_path)
         report = engine.run(args.get("threshold_days", 120))
         return [TextContent(type="text", text=json.dumps(report, indent=2))]
-    
+
     async def _handle_health(self) -> list[Any]:
         from mcp.types import TextContent
+
         health = VaultHealth(self.vault_path)
         report = health.check()
         return [TextContent(type="text", text=json.dumps(report, indent=2))]
-    
+
     async def _handle_status(self) -> list[Any]:
         from mcp.types import TextContent
+
         git = VaultGit(self.vault_path)
         status = git.status()
         return [TextContent(type="text", text=json.dumps(status, indent=2))]
-    
+
     async def _handle_skills(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         registry = CapabilityRegistry(self.vault_path)
         skills = registry.discover(provider=args.get("provider"))
         output = {
@@ -262,16 +311,16 @@ class VaultMCPServer:
             ]
         }
         return [TextContent(type="text", text=json.dumps(output, indent=2))]
-    
+
     async def _handle_new(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
         import uuid as uuid_mod
         from datetime import datetime, timezone
-        
+
         entry_type = args["type"]
         name = args["name"]
         content = args.get("content")
-        
+
         if not content:
             # Use template
             template_path = self.vault_path / "templates" / f"{entry_type}.md"
@@ -286,7 +335,7 @@ class VaultMCPServer:
                 content = content.replace("{{name}}", name)
             else:
                 content = f"# {name}\n\nCreated via MCP.\n"
-        
+
         dir_map = {
             "project": "projects",
             "person": "people",
@@ -295,24 +344,25 @@ class VaultMCPServer:
             "goal": "goals",
             "experiment": "experiments",
         }
-        
+
         target_dir = self.vault_path / dir_map[entry_type]
         target_dir.mkdir(exist_ok=True)
         safe_name = name.lower().replace(" ", "-").replace("/", "-")
         target_file = target_dir / f"{safe_name}.md"
-        
+
         git = VaultGit(self.vault_path)
         result = git.stage_write(target_file, content, agent="mcp")
-        
+
         output = {
             "created": str(target_file.relative_to(self.vault_path)),
             "staged_to": "dev",
             "hash": result.hash,
         }
         return [TextContent(type="text", text=json.dumps(output, indent=2))]
-    
+
     async def _handle_related(self, args: dict) -> list[Any]:
         from mcp.types import TextContent
+
         searcher = VaultSearch(self.vault_path)
         results = searcher.find_related(args["path"])
         output = {
@@ -324,6 +374,6 @@ class VaultMCPServer:
                     "snippet": r.snippet,
                 }
                 for r in results
-            ]
+            ],
         }
         return [TextContent(type="text", text=json.dumps(output, indent=2))]

@@ -7,13 +7,11 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import click
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -25,6 +23,7 @@ from vault.core.registry import CapabilityRegistry
 from vault.core.scheduler import SkillScheduler
 from vault.core.search import VaultSearch
 from vault.core.health import VaultHealth
+from vault.core.daemon import VaultDaemon, install_hooks
 
 console = Console()
 
@@ -35,7 +34,9 @@ def get_vault_path() -> Path:
         return find_vault_root()
     except VaultNotFoundError as e:
         console.print(f"[red]{e}[/red]")
-        console.print("\n[dim]Run 'vault init' to create a new vault, or cd into an existing one.[/dim]")
+        console.print(
+            "\n[dim]Run 'vault init' to create a new vault, or cd into an existing one.[/dim]"
+        )
         sys.exit(1)
 
 
@@ -48,29 +49,30 @@ def cli():
 
 # ─── INIT ───
 @cli.command()
-@click.option("--path", "-p", default=".", help="Vault root path")
-@click.option("--adopt", is_flag=True, help="Adopt existing git repo")
-@click.option("--defaults", is_flag=True, help="Use all defaults, no interactive prompts")
-def init(path: str, adopt: bool, defaults: bool) -> None:
-    """Initialize a new Personal Vault."""
+@click.argument("path", default=".", type=click.Path(exists=False))
+@click.option("--name", default="personal-vault", help="Vault name")
+@click.option("--force", is_flag=True, help="Overwrite existing vault")
+def init(path: str, name: str, force: bool) -> None:
+    """Initialize a new vault in the given directory."""
     vault_path = Path(path).resolve()
     vault_path.mkdir(parents=True, exist_ok=True)
-    
+
     console.print(f"[bold green]Initializing vault at {vault_path}[/bold green]")
-    
+
     # Git setup
     import subprocess
+
     git_dir = vault_path / ".git"
     if not git_dir.exists():
         subprocess.run(["git", "init", "-b", "main"], cwd=vault_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=vault_path)
         subprocess.run(["git", "config", "user.name", "Personal Vault"], cwd=vault_path)
-    
+
     # Create branches
     subprocess.run(["git", "checkout", "-b", "dev"], cwd=vault_path, capture_output=True)
     subprocess.run(["git", "checkout", "-b", "main"], cwd=vault_path, capture_output=True)
     subprocess.run(["git", "checkout", "dev"], cwd=vault_path, capture_output=True)
-    
+
     # Create structure
     (vault_path / ".vault").mkdir(exist_ok=True)
     (vault_path / ".vault/skills").mkdir(exist_ok=True)
@@ -80,41 +82,52 @@ def init(path: str, adopt: bool, defaults: bool) -> None:
     (vault_path / ".vault/index").mkdir(exist_ok=True)
     (vault_path / ".vault/schemas").mkdir(exist_ok=True)
     (vault_path / "templates").mkdir(exist_ok=True)
-    
+
     # Write config
     config = VaultConfig.default(vault_path)
     config.save(vault_path / ".vault" / "config.yaml")
-    
+
     # Write AGENTS.md
     _write_agents_md(vault_path)
-    
+
     # Write templates
     _write_templates(vault_path)
-    
+
     # Write registry
     _write_registry(vault_path)
-    
+
     # Write cron
     _write_cron(vault_path)
-    
+
     # Gitignore
     (vault_path / ".gitignore").write_text(
         ".vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n.DS_Store\nThumbs.db\n"
     )
-    
+
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "[vault] Initial setup"], cwd=vault_path, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "[vault] Initial setup"], cwd=vault_path, capture_output=True
+    )
     subprocess.run(["git", "checkout", "main"], cwd=vault_path, capture_output=True)
-    subprocess.run(["git", "merge", "dev", "--no-ff", "-m", "Bootstrap from dev"], cwd=vault_path, capture_output=True)
-    
+    subprocess.run(
+        ["git", "merge", "dev", "--no-ff", "-m", "Bootstrap from dev"],
+        cwd=vault_path,
+        capture_output=True,
+    )
+
+    # Install git hooks for event-driven harvesting
+    install_hooks(vault_path, python_executable=sys.executable)
+
     console.print("[green]✓[/green] Vault initialized")
     console.print(f"[dim]  Path: {vault_path}[/dim]")
-    console.print(f"[dim]  Branches: main (stable) / dev (agent writes)[/dim]")
+    console.print("[dim]  Branches: main (stable) / dev (agent writes)[/dim]")
+    console.print("[dim]  Hooks: post-commit + post-push (auto-harvesting)[/dim]")
     console.print("\n[bold]Next steps:[/bold]")
     console.print("  vault status     # Check vault health")
     console.print("  vault config     # Edit directory configuration")
     console.print("  vault mcp        # Install MCP server for Claude/Cursor")
+    console.print("  vault daemon     # Manually trigger context harvest")
 
 
 def _write_agents_md(vault_path: Path) -> None:
@@ -154,7 +167,7 @@ accessing this vault via MCP or direct filesystem.
 def _write_templates(vault_path: Path) -> None:
     """Write default templates."""
     templates_dir = vault_path / "templates"
-    
+
     templates = {
         "project.md": """---
 id: {{uuid}}
@@ -250,7 +263,7 @@ projects: []
 - 
 """,
     }
-    
+
     for name, content in templates.items():
         (templates_dir / name).write_text(content)
 
@@ -258,6 +271,7 @@ projects: []
 def _write_registry(vault_path: Path) -> None:
     """Write default skill registry."""
     import yaml
+
     registry = {
         "version": "1.0",
         "skills": [
@@ -282,22 +296,18 @@ def _write_registry(vault_path: Path) -> None:
                 "name": "Archive Stale Content",
                 "description": "Move files older than threshold to .vault/archive",
                 "version": "1.0.0",
-                "inputs": [
-                    {"name": "threshold_days", "type": "integer", "default": 120}
-                ],
-                "outputs": [
-                    {"type": "report", "path": ".vault/index/archive-report.yaml"}
-                ],
+                "inputs": [{"name": "threshold_days", "type": "integer", "default": 120}],
+                "outputs": [{"type": "report", "path": ".vault/index/archive-report.yaml"}],
                 "permissions": {
                     "read": ["projects/", "people/", "threads/", "experiments/", "meetings/"],
-                    "write": [".vault/archive/", ".vault/index/"]
+                    "write": [".vault/archive/", ".vault/index/"],
                 },
                 "schedule": "0 2 * * 0",
                 "providers": ["all"],
             },
-        ]
+        ],
     }
-    
+
     registry_path = vault_path / ".vault" / "registry" / "skills.yaml"
     with open(registry_path, "w") as f:
         yaml.dump(registry, f, default_flow_style=False, sort_keys=False)
@@ -306,14 +316,25 @@ def _write_registry(vault_path: Path) -> None:
 def _write_cron(vault_path: Path) -> None:
     """Write default cron config."""
     import yaml
+
     cron = {
         "version": "1.0",
         "jobs": [
-            {"skill": "archive-stale", "schedule": "0 2 * * 0", "description": "Archive files older than 120 days", "enabled": True},
-            {"skill": "health-check", "schedule": "0 9 * * 1", "description": "Weekly vault health report", "enabled": True},
-        ]
+            {
+                "skill": "archive-stale",
+                "schedule": "0 2 * * 0",
+                "description": "Archive files older than 120 days",
+                "enabled": True,
+            },
+            {
+                "skill": "health-check",
+                "schedule": "0 9 * * 1",
+                "description": "Weekly vault health report",
+                "enabled": True,
+            },
+        ],
     }
-    
+
     with open(vault_path / ".vault" / "cron.yaml", "w") as f:
         yaml.dump(cron, f, default_flow_style=False, sort_keys=False)
 
@@ -323,27 +344,27 @@ def _write_cron(vault_path: Path) -> None:
 def status() -> None:
     """Show vault health and git status."""
     vault_path = get_vault_path()
-    
+
     # Git status
     git = VaultGit(vault_path)
     gs = git.status()
-    
+
     table = Table(title="Vault Status", show_header=True)
     table.add_column("Property", style="cyan")
     table.add_column("Value", style="green")
-    
+
     table.add_row("Vault Path", str(vault_path))
     table.add_row("Branch", gs["branch"])
     table.add_row("Dirty", "Yes" if gs["is_dirty"] else "No")
     table.add_row("Last Commit", gs["last_commit"])
     table.add_row("Staged Files", str(len(gs["staged_files"])))
-    
+
     console.print(table)
-    
+
     # Health check
     health = VaultHealth(vault_path)
     report = health.check()
-    
+
     if report["errors"] > 0:
         console.print(f"\n[red]⚠ {report['errors']} errors found[/red]")
     if report["warnings"] > 0:
@@ -360,16 +381,16 @@ def config(edit: bool, show: bool) -> None:
     """View or edit vault configuration."""
     vault_path = get_vault_path()
     config_path = vault_path / ".vault" / "config.yaml"
-    
+
     if show or not edit:
         cfg = VaultConfig.load(config_path)
-        
+
         table = Table(title="Vault Configuration")
         table.add_column("Directory", style="cyan")
         table.add_column("Path", style="green")
         table.add_column("Archive (days)", style="yellow")
         table.add_column("Templates", style="blue")
-        
+
         for d in cfg.directories:
             table.add_row(
                 d.name,
@@ -377,12 +398,13 @@ def config(edit: bool, show: bool) -> None:
                 str(d.archive_after_days) if d.archive_after_days > 0 else "Never",
                 ", ".join(d.templates) if d.templates else "None",
             )
-        
+
         console.print(table)
-    
+
     if edit:
         editor = os.environ.get("EDITOR", "vim")
         import subprocess
+
         subprocess.run([editor, str(config_path)])
 
 
@@ -394,47 +416,49 @@ def config(edit: bool, show: bool) -> None:
 def archive(threshold: int | None, dry_run: bool, list_archived: bool) -> None:
     """Archive stale vault content."""
     vault_path = get_vault_path()
-    
+
     if list_archived:
         engine = ArchiveEngine(vault_path)
         archived = engine.list_archived()
-        
+
         if not archived:
             console.print("[dim]No archived files.[/dim]")
             return
-        
+
         table = Table(title="Archived Files")
         table.add_column("Original", style="cyan")
         table.add_column("Archived", style="green")
         table.add_column("Date", style="yellow")
-        
+
         for item in archived:
             table.add_row(item["original_path"], item["path"], item["archived"])
-        
+
         console.print(table)
         return
-    
+
     engine = ArchiveEngine(vault_path)
     stale = engine.scan(threshold)
-    
+
     if not stale:
         console.print("[green]✓ No stale files found[/green]")
         return
-    
+
     console.print(f"[yellow]Found {len(stale)} stale files[/yellow]")
-    
+
     for file in stale:
         rel = file.relative_to(vault_path)
         console.print(f"  [dim]{rel}[/dim]")
-    
+
     if dry_run:
         console.print("\n[dim]--dry-run: no changes made[/dim]")
         return
-    
+
     if click.confirm("Archive these files?"):
         report = engine.run(threshold)
         console.print(f"[green]✓ Archived {report['archived']} files[/green]")
-        console.print(f"[dim]  Report: {vault_path / '.vault' / 'index' / 'archive-report.yaml'}[/dim]")
+        console.print(
+            f"[dim]  Report: {vault_path / '.vault' / 'index' / 'archive-report.yaml'}[/dim]"
+        )
 
 
 # ─── SEARCH ───
@@ -447,21 +471,23 @@ def search(query: str, dir: tuple[str, ...], limit: int, semantic: bool) -> None
     """Search vault content."""
     vault_path = get_vault_path()
     searcher = VaultSearch(vault_path)
-    
-    results = searcher.search(query, directories=list(dir) if dir else None, limit=limit, semantic=semantic)
-    
+
+    results = searcher.search(
+        query, directories=list(dir) if dir else None, limit=limit, semantic=semantic
+    )
+
     if not results:
         console.print(f"[dim]No results for: {query}[/dim]")
         return
-    
+
     table = Table(title=f'Search: "{query}"')
     table.add_column("Score", style="yellow", justify="right")
     table.add_column("File", style="cyan")
     table.add_column("Snippet", style="green")
-    
+
     for r in results:
         table.add_row(f"{r.score:.1f}", r.path, r.snippet[:80])
-    
+
     console.print(table)
 
 
@@ -473,15 +499,19 @@ def health(report: bool) -> None:
     vault_path = get_vault_path()
     checker = VaultHealth(vault_path)
     result = checker.check()
-    
+
     if result["errors"] == 0 and result["warnings"] == 0:
         console.print("[green]✓ Vault is healthy[/green]")
     else:
-        console.print(f"[red]{result['errors']} errors[/red], [yellow]{result['warnings']} warnings[/yellow], {result['infos']} infos")
-    
+        console.print(
+            f"[red]{result['errors']} errors[/red], [yellow]{result['warnings']} warnings[/yellow], {result['infos']} infos"
+        )
+
     if report:
         for issue in result["issues"]:
-            color = {"error": "red", "warning": "yellow", "info": "blue"}.get(issue["severity"], "white")
+            color = {"error": "red", "warning": "yellow", "info": "blue"}.get(
+                issue["severity"], "white"
+            )
             console.print(f"\n[{color}]{issue['severity'].upper()}[{color}] {issue['category']}")
             console.print(f"  {issue['message']}")
             if issue.get("file"):
@@ -498,24 +528,24 @@ def registry(list_skills: bool, provider: str | None) -> None:
     """Manage agent capability registry."""
     vault_path = get_vault_path()
     reg = CapabilityRegistry(vault_path)
-    
+
     if list_skills or not provider:
         skills = reg.discover(provider=provider)
-        
+
         if not skills:
             console.print("[dim]No skills found.[/dim]")
             return
-        
+
         table = Table(title="Agent Skills")
         table.add_column("ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Version", style="yellow")
         table.add_column("Providers", style="blue")
         table.add_column("Schedule", style="magenta")
-        
+
         for s in skills:
             table.add_row(s.id, s.name, s.version, ", ".join(s.providers), s.schedule or "-")
-        
+
         console.print(table)
 
 
@@ -530,7 +560,7 @@ def cron(enable: bool, disable: bool, show_status: bool, edit: bool, run_now: st
     """Manage scheduled vault tasks."""
     vault_path = get_vault_path()
     scheduler = SkillScheduler(vault_path)
-    
+
     if enable:
         scheduler.load()
         scheduler.start()
@@ -539,43 +569,46 @@ def cron(enable: bool, disable: bool, show_status: bool, edit: bool, run_now: st
         try:
             while True:
                 import time
+
                 time.sleep(1)
         except KeyboardInterrupt:
             scheduler.stop()
-    
+
     elif disable:
         scheduler.stop()
-    
+
     elif show_status:
         status = scheduler.status()
         console.print(f"Running: {status['running']}")
         console.print(f"Jobs: {status['jobs_scheduled']}")
         if status["next_run"]:
             console.print(f"Next run: {status['next_run']}")
-    
+
     elif edit:
         editor = os.environ.get("EDITOR", "vim")
         import subprocess
+
         subprocess.run([editor, str(vault_path / ".vault" / "cron.yaml")])
-    
+
     elif run_now:
         scheduler.load()
         scheduler.run_once(run_now)
-    
+
     else:
         # Show cron config
         import yaml
+
         cron_file = vault_path / ".vault" / "cron.yaml"
         if cron_file.exists():
             with open(cron_file) as f:
                 config = yaml.safe_load(f) or {}
-            
+
             table = Table(title="Scheduled Jobs")
             table.add_column("Skill", style="cyan")
             table.add_column("Schedule", style="green")
             table.add_column("Description", style="yellow")
             table.add_column("Enabled", style="blue")
-            
+
             for job in config.get("jobs", []):
                 table.add_row(
                     job["skill"],
@@ -583,7 +616,7 @@ def cron(enable: bool, disable: bool, show_status: bool, edit: bool, run_now: st
                     job.get("description", ""),
                     "Yes" if job.get("enabled", True) else "No",
                 )
-            
+
             console.print(table)
 
 
@@ -595,35 +628,39 @@ def cron(enable: bool, disable: bool, show_status: bool, edit: bool, run_now: st
 def mcp(install: bool, run_server: bool, port: int) -> None:
     """Manage MCP server integration."""
     vault_path = get_vault_path()
-    
+
     if install:
         config = _get_mcp_config(vault_path)
-        
+
         console.print("[bold]MCP Configuration[/bold]")
         console.print("Add this to your MCP client config:\n")
         console.print(Panel(config, title="mcpServers", border_style="green"))
-        
+
         # Try to auto-install for common locations
-        claude_config = Path.home() / "Library" / "Application Support" / "Claude" / "mcp_config.json"
+        claude_config = (
+            Path.home() / "Library" / "Application Support" / "Claude" / "mcp_config.json"
+        )
         if claude_config.exists():
             console.print(f"\n[dim]Found Claude config at {claude_config}[/dim]")
             if click.confirm("Install to Claude?"):
                 import json
+
                 with open(claude_config) as f:
                     existing = json.load(f)
                 existing.setdefault("mcpServers", {})
                 existing["mcpServers"]["personal-vault"] = {
                     "command": "vault",
                     "args": ["mcp", "--run"],
-                    "env": {"VAULT_PATH": str(vault_path)}
+                    "env": {"VAULT_PATH": str(vault_path)},
                 }
                 with open(claude_config, "w") as f:
                     json.dump(existing, f, indent=2)
                 console.print("[green]✓ Installed to Claude[/green]")
-    
+
     elif run_server:
         try:
             from vault.mcp.server import VaultMCPServer
+
             server = VaultMCPServer(str(vault_path))
             console.print("[green]Starting MCP server...[/green]")
             server.run()
@@ -635,14 +672,13 @@ def mcp(install: bool, run_server: bool, port: int) -> None:
 def _get_mcp_config(vault_path: Path) -> str:
     """Generate MCP config JSON."""
     import json
+
     config = {
         "mcpServers": {
             "personal-vault": {
                 "command": "vault",
                 "args": ["mcp", "--run"],
-                "env": {
-                    "VAULT_PATH": str(vault_path)
-                }
+                "env": {"VAULT_PATH": str(vault_path)},
             }
         }
     }
@@ -658,12 +694,12 @@ def stage(filepath: str, content: str, agent: str) -> None:
     """Stage a file write to dev branch."""
     vault_path = get_vault_path()
     git = VaultGit(vault_path)
-    
+
     result = git.stage_write(filepath, content, agent)
-    console.print(f"[green]✓ Staged to dev[/green]")
+    console.print("[green]✓ Staged to dev[/green]")
     console.print(f"[dim]  File: {result.file}[/dim]")
     console.print(f"[dim]  Hash: {result.hash}[/dim]")
-    
+
     # Raise PR
     pr = git.raise_pr(
         title=f"[{agent}] Update {Path(filepath).name}",
@@ -679,13 +715,13 @@ def promote(pr_id: str | None) -> None:
     """Promote staged files from dev to main."""
     vault_path = get_vault_path()
     git = VaultGit(vault_path)
-    
+
     # Show diff first
     diff = git.diff_staged()
     if diff:
         console.print("[bold]Staged changes:[/bold]")
         console.print(diff)
-    
+
     if click.confirm("Promote to main?"):
         promoted = git.promote_staged(pr_id)
         console.print(f"[green]✓ Promoted {len(promoted)} files to main[/green]")
@@ -693,21 +729,23 @@ def promote(pr_id: str | None) -> None:
 
 # ─── NEW ───
 @cli.command()
-@click.argument("type", type=click.Choice(["project", "person", "meeting", "decision", "goal", "experiment"]))
+@click.argument(
+    "type", type=click.Choice(["project", "person", "meeting", "decision", "goal", "experiment"])
+)
 @click.argument("name")
 @click.option("--agent", default="cli", help="Agent identifier")
 def new(type: str, name: str, agent: str) -> None:
     """Create a new vault entry from template."""
     vault_path = get_vault_path()
-    
+
     # Load template
     template_path = vault_path / "templates" / f"{type}.md"
     if not template_path.exists():
         console.print(f"[red]Template not found: {template_path}[/red]")
         return
-    
+
     template = template_path.read_text()
-    
+
     # Replace placeholders
     now = datetime.now(timezone.utc)
     content = template.replace("{{uuid}}", str(uuid.uuid4()))
@@ -716,7 +754,7 @@ def new(type: str, name: str, agent: str) -> None:
     content = content.replace("{{agent}}", agent)
     content = content.replace("{{title}}", name)
     content = content.replace("{{name}}", name)
-    
+
     # Determine target directory
     dir_map = {
         "project": "projects",
@@ -726,21 +764,22 @@ def new(type: str, name: str, agent: str) -> None:
         "goal": "goals",
         "experiment": "experiments",
     }
-    
+
     target_dir = vault_path / dir_map[type]
     target_dir.mkdir(exist_ok=True)
-    
+
     # Sanitize filename
     safe_name = name.lower().replace(" ", "-").replace("/", "-")
     target_file = target_dir / f"{safe_name}.md"
-    
+
     # Stage to dev
     git = VaultGit(vault_path)
     result = git.stage_write(target_file, content, agent)
-    
+
     console.print(f"[green]✓ Created {type}[/green]")
     console.print(f"[dim]  File: {target_file.relative_to(vault_path)}[/dim]")
-    console.print(f"[dim]  Staged to dev branch[/dim]")
+    console.print(f"[dim]  Hash: {result.hash}[/dim]")
+    console.print("[dim]  Staged to dev branch[/dim]")
 
 
 # ─── INDEX ───
@@ -751,6 +790,29 @@ def index() -> None:
     searcher = VaultSearch(vault_path)
     result = searcher.build_index()
     console.print(f"[green]✓ Indexed {len(result['entries'])} entries[/green]")
+
+
+# ─── DAEMON ───
+@cli.command()
+@click.option("--project", "-p", default=".", help="Project path to harvest")
+@click.option(
+    "--trigger",
+    "-t",
+    type=click.Choice(["commit", "push", "manual"]),
+    default="manual",
+    help="Trigger type",
+)
+def daemon(project: str, trigger: str) -> None:
+    """Trigger event-driven context harvest (used by git hooks)."""
+    project_path = Path(project).resolve()
+
+    if not (project_path / ".vault" / "config.yaml").exists():
+        console.print(f"[red]No vault found at {project_path}[/red]")
+        console.print("[dim]Run 'vault init' first.[/dim]")
+        sys.exit(1)
+
+    vd = VaultDaemon(project_path)
+    vd.run(trigger)
 
 
 if __name__ == "__main__":

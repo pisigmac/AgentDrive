@@ -15,6 +15,15 @@ class TestVaultHealth:
             (path / ".vault").mkdir()
             (path / "projects").mkdir()
             
+            import git
+            repo = git.Repo.init(path)
+            (path / "init").write_text("init")
+            repo.index.add(["init"])
+            repo.index.commit("init")
+            if repo.active_branch.name != "main":
+                repo.active_branch.rename("main")
+            repo.create_head("dev")
+            
             # Good file with frontmatter
             (path / "projects" / "good.md").write_text(
                 "---\nid: 1\ncreated: 2026-01-01\nmodified: 2026-01-01\ntags: []\nstatus: active\nsource: test\n---\n\n# Good"
