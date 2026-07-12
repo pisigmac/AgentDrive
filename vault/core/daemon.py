@@ -71,12 +71,16 @@ class VaultDaemon:
         self._save_state()
 
         if entries > 0 and self.brain_path:
+            # Clean Git env vars to prevent hook bleed into CentralBrain subprocesses
+            clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+            
             # Commit files into the Brain dev branch
-            subprocess.run(["git", "add", "."], cwd=self.brain_path, capture_output=True)
+            subprocess.run(["git", "add", "."], cwd=self.brain_path, capture_output=True, env=clean_env)
             subprocess.run(
                 ["git", "commit", "-m", f"🤖 Auto-harvest: {self.project.name} ({entries} updates)"],
                 cwd=self.brain_path,
-                capture_output=True
+                capture_output=True,
+                env=clean_env
             )
 
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
