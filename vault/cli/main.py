@@ -232,8 +232,24 @@ def link(brain: str, path: str) -> None:
 def _write_gitignore(vault_path: Path) -> None:
     """Ensure .vault/ and sensitive files are completely ignored in Git to prevent leaks."""
     gitignore_path = vault_path / ".gitignore"
-    vault_ignores = "\n# AgentDrive\n.vault/\n.session\n"
-    sensitive_ignores = (
+    comprehensive_ignores = (
+        "\n# Common Dependencies & OS\n"
+        "node_modules/\n"
+        "venv/\n"
+        ".venv/\n"
+        ".run/\n"
+        "__pycache__/\n"
+        "*.pyc\n"
+        ".pytest_cache/\n"
+        ".DS_Store\n"
+        "\n# Databases & Backups\n"
+        "data/*.db\n"
+        "data/*.db-wal\n"
+        "data/*.db-shm\n"
+        "backups/\n"
+        "\n# AgentDrive\n"
+        ".vault/\n"
+        ".session\n"
         "\n# Security & Credentials\n"
         ".env\n"
         ".env.*\n"
@@ -254,13 +270,19 @@ def _write_gitignore(vault_path: Path) -> None:
     if gitignore_path.exists():
         content = gitignore_path.read_text()
         with open(gitignore_path, "a") as f:
-            if ".vault/" not in content:
-                f.write(vault_ignores)
-            if "credentials.json" not in content and ".env" not in content:
-                f.write(sensitive_ignores)
+            if "node_modules/" not in content and "venv/" not in content:
+                f.write(comprehensive_ignores)
+            elif ".vault/" not in content:
+                # If they already had node_modules but not vault, just append vault and security
+                f.write("\n# AgentDrive\n.vault/\n.session\n")
+            if "credentials.json" not in content and ".env" not in content and "node_modules/" in content:
+                 # If they had node_modules but not security, just append security
+                 f.write(
+                     "\n# Security & Credentials\n.env\n.env.*\n!.env.example\n*.pem\n*.key\n*.cert\n*.p12\n"
+                     "id_rsa\nid_dsa\nid_ecdsa\nid_ed25519\n*secret*.json\n*token*.json\ncredentials.json\n"
+                 )
     else:
-        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.DS_Store\nThumbs.db\n"
-        gitignore_path.write_text(standard_ignores + sensitive_ignores + vault_ignores)
+        gitignore_path.write_text(comprehensive_ignores.lstrip())
 
 
 def _write_github_workflow(vault_path: Path) -> None:
