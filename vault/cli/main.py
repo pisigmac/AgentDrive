@@ -230,17 +230,37 @@ def link(brain: str, path: str) -> None:
 
 
 def _write_gitignore(vault_path: Path) -> None:
-    """Ensure .vault/ is completely ignored in Git to prevent absolute path leakage."""
+    """Ensure .vault/ and sensitive files are completely ignored in Git to prevent leaks."""
     gitignore_path = vault_path / ".gitignore"
     vault_ignores = "\n# AgentDrive\n.vault/\n.session\n"
+    sensitive_ignores = (
+        "\n# Security & Credentials\n"
+        ".env\n"
+        ".env.*\n"
+        "!.env.example\n"
+        "*.pem\n"
+        "*.key\n"
+        "*.cert\n"
+        "*.p12\n"
+        "id_rsa\n"
+        "id_dsa\n"
+        "id_ecdsa\n"
+        "id_ed25519\n"
+        "*secret*.json\n"
+        "*token*.json\n"
+        "credentials.json\n"
+    )
+    
     if gitignore_path.exists():
         content = gitignore_path.read_text()
-        if ".vault/" not in content:
-            with open(gitignore_path, "a") as f:
+        with open(gitignore_path, "a") as f:
+            if ".vault/" not in content:
                 f.write(vault_ignores)
+            if "credentials.json" not in content and ".env" not in content:
+                f.write(sensitive_ignores)
     else:
-        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.env\n.DS_Store\nThumbs.db\n"
-        gitignore_path.write_text(standard_ignores + vault_ignores)
+        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.DS_Store\nThumbs.db\n"
+        gitignore_path.write_text(standard_ignores + sensitive_ignores + vault_ignores)
 
 
 def _write_github_workflow(vault_path: Path) -> None:
