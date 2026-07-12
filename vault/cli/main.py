@@ -120,11 +120,11 @@ def init(path: str, name: str, force: bool) -> None:
 
     # Install git hooks for event-driven harvesting
     install_hooks(vault_path, python_executable=sys.executable)
-
+    console.print(f"[vault] Git hooks installed: {git_dir / 'hooks'}")
     console.print("[green]✓[/green] Vault initialized")
     console.print(f"[dim]  Path: {vault_path}[/dim]")
     console.print("[dim]  Branches: main (stable) / dev (agent writes)[/dim]")
-    console.print("[dim]  Hooks: post-commit + post-push (auto-harvesting)[/dim]")
+    console.print("[dim]  Hooks: post-commit + pre-push (auto-harvesting)[/dim]")
     console.print("\n[bold]Next steps:[/bold]")
     console.print("  vault status     # Check vault health")
     console.print("  vault config     # Edit directory configuration")

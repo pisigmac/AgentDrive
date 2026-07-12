@@ -548,9 +548,9 @@ def install_hooks(project_path: Path, python_executable: str | None = None, brai
     post_commit.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} commit\n")
     post_commit.chmod(0o755)
 
-    # post-push: full harvest
-    post_push = hooks_dir / "post-push"
-    post_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
-    post_push.chmod(0o755)
+    # pre-push: full harvest (git has no post-push hook)
+    pre_push = hooks_dir / "pre-push"
+    pre_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
+    pre_push.chmod(0o755)
 
     print(f"[vault] Git hooks installed: {hooks_dir}")
