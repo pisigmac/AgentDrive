@@ -68,9 +68,10 @@ vault init
 If you have multiple projects and don't want to clutter them with `.vault/` folders, you can use the Central Brain architecture.
 
 1. **Create the Brain:** Pick a central folder (e.g., `~/AgentDriveBrain`) and run `vault init`.
-2. **Link your Projects:** Navigate to your pure code repositories and run `vault link --brain ~/AgentDriveBrain`.
+2. **Activate the Brain:** Tell AgentDrive this is your primary brain by running `vault brain ~/AgentDriveBrain`.
+3. **Link your Projects:** Navigate to any pure code repository and simply run `vault link`. It will automatically link to your active brain!
 
-This drops a tiny `AGENTS.md` redirect file in your codebase that instructs AI agents to read context from the Central Brain. Every time you commit, the local daemon wakes up and routes all the generated context directly into your Brain repository!
+This drops a tiny `AGENTS.md` redirect file in your codebase that instructs AI agents to read context from the Central Brain. Every time you push or commit, the local daemon wakes up and routes all the generated context directly into your Brain repository!
 
 <br>
 <hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />

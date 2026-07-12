@@ -133,14 +133,62 @@ def init(path: str, name: str, force: bool) -> None:
 
 
 @cli.command()
-@click.option("--brain", required=True, help="Path to the central AgentDrive Brain repository")
+@click.argument("path", default=".")
+def brain(path: str) -> None:
+    """Set the specified path as the active Central Brain."""
+    from pathlib import Path
+    import json
+
+    brain_path = Path(path).resolve()
+    if not (brain_path / ".vault" / "config.yaml").exists():
+        console.print(f"[red]Error:[/red] The specified path ({brain_path}) does not look like a valid AgentDrive Brain.")
+        sys.exit(1)
+
+    global_dir = Path.home() / ".agentdrive"
+    global_dir.mkdir(parents=True, exist_ok=True)
+    global_config_path = global_dir / "config.json"
+    
+    global_config = {"links": {}}
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+        except Exception:
+            pass
+
+    global_config["active_brain"] = str(brain_path)
+    global_config_path.write_text(json.dumps(global_config, indent=2))
+    
+    console.print(f"[bold green]✓ Active Central Brain set to:[/bold green] {brain_path}")
+
+
+@cli.command()
+@click.option("--brain", required=False, help="Path to the central AgentDrive Brain repository (overrides active brain)")
 @click.option("--path", default=".", help="Project path to link")
-def link(brain: str, path: str) -> None:
+def link(brain: str | None, path: str) -> None:
     """Link a project to a Central Brain without creating local vault folders."""
     import subprocess
+    import json
     from pathlib import Path
 
     project_path = Path(path).resolve()
+    
+    global_dir = Path.home() / ".agentdrive"
+    global_config_path = global_dir / "config.json"
+    
+    if brain is None:
+        if not global_config_path.exists():
+            console.print("[red]Error:[/red] No active brain set and --brain not provided. Run `vault brain <path>` first.")
+            sys.exit(1)
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            brain = global_config.get("active_brain")
+        except Exception:
+            brain = None
+            
+        if not brain:
+            console.print("[red]Error:[/red] No active brain configured. Run `vault brain <path>` first.")
+            sys.exit(1)
+
     brain_path = Path(brain).resolve()
 
     if not (brain_path / ".vault" / "config.yaml").exists():
