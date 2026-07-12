@@ -104,16 +104,7 @@ def init(path: str, name: str, force: bool) -> None:
     _write_cron(vault_path)
 
     # Gitignore
-    gitignore_path = vault_path / ".gitignore"
-    vault_ignores = "\n# AgentDrive\n.vault/staging/\n.vault/index/\n.vault/archive/*.tmp\n.session\n"
-    if gitignore_path.exists():
-        content = gitignore_path.read_text()
-        if ".vault/staging/" not in content:
-            with open(gitignore_path, "a") as f:
-                f.write(vault_ignores)
-    else:
-        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.env\n.DS_Store\nThumbs.db\n"
-        gitignore_path.write_text(standard_ignores + vault_ignores)
+    _write_gitignore(vault_path)
 
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
@@ -214,6 +205,9 @@ def link(brain: str, path: str) -> None:
 
     # Write GitHub Workflow
     _write_github_workflow(project_path)
+    
+    # Gitignore
+    _write_gitignore(project_path)
 
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
@@ -233,6 +227,20 @@ def link(brain: str, path: str) -> None:
     console.print("[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!")
     console.print("[dim]  Local AGENTS.md updated safely.[/dim]")
     console.print("[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]")
+
+
+def _write_gitignore(vault_path: Path) -> None:
+    """Ensure .vault/ is completely ignored in Git to prevent absolute path leakage."""
+    gitignore_path = vault_path / ".gitignore"
+    vault_ignores = "\n# AgentDrive\n.vault/\n.session\n"
+    if gitignore_path.exists():
+        content = gitignore_path.read_text()
+        if ".vault/" not in content:
+            with open(gitignore_path, "a") as f:
+                f.write(vault_ignores)
+    else:
+        standard_ignores = "node_modules/\nvenv/\n.venv/\n__pycache__/\n.env\n.DS_Store\nThumbs.db\n"
+        gitignore_path.write_text(standard_ignores + vault_ignores)
 
 
 def _write_github_workflow(vault_path: Path) -> None:
