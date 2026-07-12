@@ -138,14 +138,21 @@ class VaultDaemon:
                 desc = p[:300]
                 break
 
+        readme_lines = content.split('\n')
+        if len(readme_lines) > 500:
+            truncated_content = '\n'.join(readme_lines[:500])
+            truncation_notice = "\n\n_(truncated — see full README in project root)_\n"
+        else:
+            truncated_content = content
+            truncation_notice = "\n"
+
         body = (
             f"# {title}\n\n"
             f"**Project:** `{self.project.name}`\n\n"
             f"**Path:** `{self.project.name}`\n\n"
             f"**Description:** {desc}\n\n"
             f"## README\n\n"
-            f"{content[:4000]}\n\n"
-            f"_(truncated — see full README in project root)_\n"
+            f"{truncated_content}{truncation_notice}"
         )
 
         dest = self.output_dir / "README.md"
