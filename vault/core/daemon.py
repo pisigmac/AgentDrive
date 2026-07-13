@@ -22,14 +22,14 @@ class VaultDaemon:
     def __init__(self, project_path: Path, brain_path: Path | None = None):
         self.project = Path(project_path).resolve()
         self.brain_path = Path(brain_path).resolve() if brain_path else None
-        
+
         if self.brain_path:
             self.vault = self.brain_path / ".vault"
             self.output_dir = self.brain_path / "projects" / self.project.name
         else:
             self.vault = self.project / ".vault"
             self.output_dir = self.project / "projects"
-            
+
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
 
@@ -49,7 +49,7 @@ class VaultDaemon:
         for d in ("projects", "commits", "decisions", "meetings", "sessions"):
             target = self.brain_path / d if self.brain_path else self.project / d
             target.mkdir(parents=True, exist_ok=True)
-            
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         entries = 0
@@ -73,14 +73,21 @@ class VaultDaemon:
         if entries > 0 and self.brain_path:
             # Clean Git env vars to prevent hook bleed into CentralBrain subprocesses
             clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-            
+
             # Commit files into the Brain dev branch
-            subprocess.run(["git", "add", "."], cwd=self.brain_path, capture_output=True, env=clean_env)
             subprocess.run(
-                ["git", "commit", "-m", f"🤖 Auto-harvest: {self.project.name} ({entries} updates)"],
+                ["git", "add", "."], cwd=self.brain_path, capture_output=True, env=clean_env
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    f"🤖 Auto-harvest: {self.project.name} ({entries} updates)",
+                ],
                 cwd=self.brain_path,
                 capture_output=True,
-                env=clean_env
+                env=clean_env,
             )
 
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
@@ -138,9 +145,9 @@ class VaultDaemon:
                 desc = p[:300]
                 break
 
-        readme_lines = content.split('\n')
+        readme_lines = content.split("\n")
         if len(readme_lines) > 500:
-            truncated_content = '\n'.join(readme_lines[:500])
+            truncated_content = "\n".join(readme_lines[:500])
             truncation_notice = "\n\n_(truncated — see full README in project root)_\n"
         else:
             truncated_content = content
@@ -160,9 +167,7 @@ class VaultDaemon:
             1
             if self._write_if_changed(
                 dest,
-                self._frontmatter(
-                    f"{self.project.name} — Overview", "overview", ["readme"], body
-                ),
+                self._frontmatter(f"{self.project.name} — Overview", "overview", ["readme"], body),
             )
             else 0
         )
@@ -538,7 +543,9 @@ class VaultDaemon:
         return True
 
 
-def install_hooks(project_path: Path, python_executable: str | None = None, brain_path: str | None = None) -> None:
+def install_hooks(
+    project_path: Path, python_executable: str | None = None, brain_path: str | None = None
+) -> None:
     """Install post-commit and post-push hooks into a project's .git/hooks/."""
     project_path = Path(project_path).resolve()
     git_dir = project_path / ".git"

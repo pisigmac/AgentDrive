@@ -67,7 +67,11 @@ def init(path: str, name: str, force: bool) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=vault_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=vault_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=vault_path)
-        subprocess.run(["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"], cwd=vault_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"],
+            cwd=vault_path,
+            capture_output=True,
+        )
 
     # Create or switch to dev branch
     result = subprocess.run(["git", "checkout", "-b", "dev"], cwd=vault_path, capture_output=True)
@@ -141,13 +145,15 @@ def brain(path: str) -> None:
 
     brain_path = Path(path).resolve()
     if not (brain_path / ".vault" / "config.yaml").exists():
-        console.print(f"[red]Error:[/red] The specified path ({brain_path}) does not look like a valid AgentDrive Brain.")
+        console.print(
+            f"[red]Error:[/red] The specified path ({brain_path}) does not look like a valid AgentDrive Brain."
+        )
         sys.exit(1)
 
     global_dir = Path.home() / ".agentdrive"
     global_dir.mkdir(parents=True, exist_ok=True)
     global_config_path = global_dir / "config.json"
-    
+
     global_config = {"links": {}}
     if global_config_path.exists():
         try:
@@ -157,12 +163,16 @@ def brain(path: str) -> None:
 
     global_config["active_brain"] = str(brain_path)
     global_config_path.write_text(json.dumps(global_config, indent=2))
-    
+
     console.print(f"[bold green]✓ Active Central Brain set to:[/bold green] {brain_path}")
 
 
 @cli.command()
-@click.option("--brain", required=False, help="Path to the central AgentDrive Brain repository (overrides active brain)")
+@click.option(
+    "--brain",
+    required=False,
+    help="Path to the central AgentDrive Brain repository (overrides active brain)",
+)
 @click.option("--path", default=".", help="Project path to link")
 def link(brain: str | None, path: str) -> None:
     """Link a project to a Central Brain without creating local vault folders."""
@@ -171,22 +181,26 @@ def link(brain: str | None, path: str) -> None:
     from pathlib import Path
 
     project_path = Path(path).resolve()
-    
+
     global_dir = Path.home() / ".agentdrive"
     global_config_path = global_dir / "config.json"
-    
+
     if brain is None:
         if not global_config_path.exists():
-            console.print("[red]Error:[/red] No active brain set and --brain not provided. Run `vault brain <path>` first.")
+            console.print(
+                "[red]Error:[/red] No active brain set and --brain not provided. Run `vault brain <path>` first."
+            )
             sys.exit(1)
         try:
             global_config = json.loads(global_config_path.read_text())
             brain = global_config.get("active_brain")
         except Exception:
             brain = None
-            
+
         if not brain:
-            console.print("[red]Error:[/red] No active brain configured. Run `vault brain <path>` first.")
+            console.print(
+                "[red]Error:[/red] No active brain configured. Run `vault brain <path>` first."
+            )
             sys.exit(1)
 
     brain_path = Path(brain).resolve()
@@ -206,7 +220,11 @@ def link(brain: str | None, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
-        subprocess.run(["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"], cwd=project_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"],
+            cwd=project_path,
+            capture_output=True,
+        )
 
     # Create or switch to dev branch
     result = subprocess.run(["git", "checkout", "-b", "dev"], cwd=project_path, capture_output=True)
@@ -217,21 +235,22 @@ def link(brain: str | None, path: str) -> None:
     global_dir = Path.home() / ".agentdrive"
     global_dir.mkdir(parents=True, exist_ok=True)
     global_config_path = global_dir / "config.json"
-    
+
     import json
+
     global_config = {"links": {}}
     if global_config_path.exists():
         try:
             global_config = json.loads(global_config_path.read_text())
         except Exception:
             pass
-            
+
     if "links" not in global_config:
         global_config["links"] = {}
-        
+
     global_config["links"][str(project_path)] = str(brain_path)
     global_config_path.write_text(json.dumps(global_config, indent=2))
-    
+
     # Create symlink for AI tools
     brains_dir = global_dir / "brains"
     brains_dir.mkdir(parents=True, exist_ok=True)
@@ -243,7 +262,7 @@ def link(brain: str | None, path: str) -> None:
     # Append generic instruction to AGENTS.md
     agents_md = project_path / "AGENTS.md"
     generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
-    
+
     if agents_md.exists():
         content = agents_md.read_text()
         if "Global system memory is tracked securely" not in content:
@@ -253,28 +272,38 @@ def link(brain: str | None, path: str) -> None:
 
     # Write GitHub Workflow
     _write_github_workflow(project_path)
-    
+
     # Gitignore
     _write_gitignore(project_path)
 
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
+
     install_hooks(project_path, python_executable=sys.executable)
 
     # Update Brain config
     from vault.core.config import VaultConfig, DirectoryConfig
+
     brain_config = VaultConfig.load(brain_path / ".vault" / "config.yaml")
-    brain_config.directories.append(DirectoryConfig(**{
-        "name": project_path.name,
-        "description": f"Linked project: {project_path.name}",
-        "path": str(project_path),
-        "vault_path": str(brain_path / "projects" / project_path.name)
-    }))
+    brain_config.directories.append(
+        DirectoryConfig(
+            **{
+                "name": project_path.name,
+                "description": f"Linked project: {project_path.name}",
+                "path": str(project_path),
+                "vault_path": str(brain_path / "projects" / project_path.name),
+            }
+        )
+    )
     brain_config.save(brain_path / ".vault" / "config.yaml")
 
-    console.print("[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!")
+    console.print(
+        "[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!"
+    )
     console.print("[dim]  Local AGENTS.md updated safely.[/dim]")
-    console.print("[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]")
+    console.print(
+        "[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]"
+    )
 
 
 def _write_gitignore(vault_path: Path) -> None:
@@ -314,7 +343,7 @@ def _write_gitignore(vault_path: Path) -> None:
         "*token*.json\n"
         "credentials.json\n"
     )
-    
+
     if gitignore_path.exists():
         content = gitignore_path.read_text()
         with open(gitignore_path, "a") as f:
@@ -323,12 +352,16 @@ def _write_gitignore(vault_path: Path) -> None:
             elif ".vault/" not in content:
                 # If they already had node_modules but not vault, just append vault and security
                 f.write("\n# AgentDrive\n.vault/\n.session\n")
-            if "credentials.json" not in content and ".env" not in content and "node_modules/" in content:
-                 # If they had node_modules but not security, just append security
-                 f.write(
-                     "\n# Security & Credentials\n.env\n.env.*\n!.env.example\n*.pem\n*.key\n*.cert\n*.p12\n"
-                     "id_rsa\nid_dsa\nid_ecdsa\nid_ed25519\n*secret*.json\n*token*.json\ncredentials.json\n"
-                 )
+            if (
+                "credentials.json" not in content
+                and ".env" not in content
+                and "node_modules/" in content
+            ):
+                # If they had node_modules but not security, just append security
+                f.write(
+                    "\n# Security & Credentials\n.env\n.env.*\n!.env.example\n*.pem\n*.key\n*.cert\n*.p12\n"
+                    "id_rsa\nid_dsa\nid_ecdsa\nid_ed25519\n*secret*.json\n*token*.json\ncredentials.json\n"
+                )
     else:
         gitignore_path.write_text(comprehensive_ignores.lstrip())
 
@@ -382,10 +415,15 @@ jobs:
     workflow_file = workflows_dir / "agentdrive-auto-pr.yml"
     if not workflow_file.exists():
         workflow_file.write_text(workflow_content)
-        
+
         # Automatically stage it so the user doesn't forget
         import subprocess
-        subprocess.run(["git", "add", ".github/workflows/agentdrive-auto-pr.yml"], cwd=vault_path, capture_output=True)
+
+        subprocess.run(
+            ["git", "add", ".github/workflows/agentdrive-auto-pr.yml"],
+            cwd=vault_path,
+            capture_output=True,
+        )
 
 
 def _write_agents_md(vault_path: Path) -> None:
@@ -1074,6 +1112,7 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
         global_config_path = Path.home() / ".agentdrive" / "config.json"
         if global_config_path.exists():
             import json
+
             try:
                 global_config = json.loads(global_config_path.read_text())
                 links = global_config.get("links", {})
