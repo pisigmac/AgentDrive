@@ -22,14 +22,14 @@ class VaultDaemon:
     def __init__(self, project_path: Path, brain_path: Path | None = None):
         self.project = Path(project_path).resolve()
         self.brain_path = Path(brain_path).resolve() if brain_path else None
-        
+
         if self.brain_path:
             self.vault = self.brain_path / ".vault"
             self.output_dir = self.brain_path / "projects" / self.project.name
         else:
             self.vault = self.project / ".vault"
             self.output_dir = self.project / "projects"
-            
+
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
 
@@ -49,7 +49,7 @@ class VaultDaemon:
         for d in ("projects", "commits", "decisions", "meetings", "sessions"):
             target = self.brain_path / d if self.brain_path else self.project / d
             target.mkdir(parents=True, exist_ok=True)
-            
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         entries = 0
@@ -71,12 +71,23 @@ class VaultDaemon:
         self._save_state()
 
         if entries > 0 and self.brain_path:
+            # Clean Git env vars to prevent hook bleed into CentralBrain subprocesses
+            clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
             # Commit files into the Brain dev branch
-            subprocess.run(["git", "add", "."], cwd=self.brain_path, capture_output=True)
             subprocess.run(
-                ["git", "commit", "-m", f"🤖 Auto-harvest: {self.project.name} ({entries} updates)"],
+                ["git", "add", "."], cwd=self.brain_path, capture_output=True, env=clean_env
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    f"🤖 Auto-harvest: {self.project.name} ({entries} updates)",
+                ],
                 cwd=self.brain_path,
-                capture_output=True
+                capture_output=True,
+                env=clean_env,
             )
 
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
@@ -134,14 +145,21 @@ class VaultDaemon:
                 desc = p[:300]
                 break
 
+        readme_lines = content.split("\n")
+        if len(readme_lines) > 500:
+            truncated_content = "\n".join(readme_lines[:500])
+            truncation_notice = "\n\n_(truncated — see full README in project root)_\n"
+        else:
+            truncated_content = content
+            truncation_notice = "\n"
+
         body = (
             f"# {title}\n\n"
             f"**Project:** `{self.project.name}`\n\n"
             f"**Path:** `{self.project.name}`\n\n"
             f"**Description:** {desc}\n\n"
             f"## README\n\n"
-            f"{content[:4000]}\n\n"
-            f"_(truncated — see full README in project root)_\n"
+            f"{truncated_content}{truncation_notice}"
         )
 
         dest = self.output_dir / "README.md"
@@ -149,9 +167,7 @@ class VaultDaemon:
             1
             if self._write_if_changed(
                 dest,
-                self._frontmatter(
-                    f"{self.project.name} — Overview", "overview", ["readme"], body
-                ),
+                self._frontmatter(f"{self.project.name} — Overview", "overview", ["readme"], body),
             )
             else 0
         )
@@ -527,7 +543,9 @@ class VaultDaemon:
         return True
 
 
-def install_hooks(project_path: Path, python_executable: str | None = None, brain_path: str | None = None) -> None:
+def install_hooks(
+    project_path: Path, python_executable: str | None = None, brain_path: str | None = None
+) -> None:
     """Install post-commit and post-push hooks into a project's .git/hooks/."""
     project_path = Path(project_path).resolve()
     git_dir = project_path / ".git"
@@ -548,9 +566,9 @@ def install_hooks(project_path: Path, python_executable: str | None = None, brai
     post_commit.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} commit\n")
     post_commit.chmod(0o755)
 
-    # post-push: full harvest
-    post_push = hooks_dir / "post-push"
-    post_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
-    post_push.chmod(0o755)
+    # pre-push: full harvest (git has no post-push hook)
+    pre_push = hooks_dir / "pre-push"
+    pre_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
+    pre_push.chmod(0o755)
 
     print(f"[vault] Git hooks installed: {hooks_dir}")

@@ -22,3 +22,8 @@ Thumbs.db
 .env
 .venv/
 venv/
+.session
+
+# AgentDrive
+.vault/
+.session

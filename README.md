@@ -1,14 +1,46 @@
-# 🧠 AgentDrive
+<div align="center">
 
-**Give your AI Agents a Git-Native, Infinite Memory Drive.**
+[![CI](https://github.com/pisigmac/AgentDrive/actions/workflows/agentdrive-auto-pr.yml/badge.svg)](https://github.com/pisigmac/AgentDrive/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Say goodbye to black-box vector databases and locked-in memory platforms. **AgentDrive** turns your local filesystem into a highly structured, self-updating, markdown-based memory system. Whether you use Claude, Cursor, OpenAI, or a custom script, your agents can seamlessly read, write, and reason over an ever-evolving context that lives right alongside your code.
+<h1>
+  <picture>
+    <img width="80" height="80" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9e0.svg" alt="Brain Logo">
+  </picture>
+  <br/>
+  AgentDrive
+</h1>
+
+<h3>Give your AI Agents a Git-Native, Infinite Memory Drive.</h3>
+
+<p>
+Say goodbye to black-box vector databases and locked-in memory platforms.<br/>
+<b>AgentDrive</b> turns your local filesystem into a highly structured, self-updating,<br/>
+markdown-based memory system for Claude, Cursor, and OpenAI.
+</p>
+
+</div>
 
 ---
 
-## Quick Start
+### 🧠 The Next Evolution of Agent Context
 
-### One-Command Install
+└ **Git-Native Memory** — All agent writes go to `dev`, keeping `main` perfectly stable.<br>
+└ **Central Brain Architecture** — Link endless repositories to a single, global memory vault.<br>
+└ **Auto-Harvesting Daemon** — Background processes automatically summarize code changes into context.<br>
+└ **Offline-First MCP Server** — Works locally without relying on cloud embeddings.<br>
+└ **Built-in Auto-Archive** — Self-maintaining vault that archives stale contexts after 120 days.<br>
+└ **Strict Governance** — Enforces root `AGENTS.md` rules for every autonomous action.<br>
+
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
+
+### 🚀 Quick Start
+
+One command to initialize AgentDrive globally:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/pisigmac/agentdrive/main/setup.sh | bash
@@ -27,132 +59,88 @@ cd ~/my-project
 vault init
 ```
 
-### Adopting Existing Projects
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
-You can run `vault init` safely inside projects that already have code and a `.git` repository! Here is what happens:
-- It detects your existing `.git` repo and gracefully creates a new `dev` branch for AI agents to write to.
-- It safely scaffolds the `.vault/` configuration and templates.
-- **Tip:** `vault init` commits these setup files automatically. Ensure your working tree is clean before running it to avoid bundling uncommitted changes into the initialization commit.
-- **Auto-Summarization:** The vault won't scan your codebase immediately on init. Instead, a background daemon will automatically wake up and summarize your tech stack, folder structure, open TODOs, and health status **the very next time you make a commit**. 
-- To force an immediate summarization without waiting for a commit, simply run:
-  ```bash
-  vault daemon
-  ```
-
-### The Central Brain Architecture (Multi-Repo)
+### 🌐 The Central Brain Architecture (Multi-Repo)
 
 If you have multiple projects and don't want to clutter them with `.vault/` folders, you can use the Central Brain architecture.
 
 1. **Create the Brain:** Pick a central folder (e.g., `~/AgentDriveBrain`) and run `vault init`.
-2. **Link your Projects:** Navigate to your pure code repositories and run `vault link --brain ~/AgentDriveBrain`.
+2. **Activate the Brain:** Tell AgentDrive this is your primary brain by running `vault brain ~/AgentDriveBrain`.
+3. **Link your Projects:** Navigate to any pure code repository and simply run `vault link`. It will automatically link to your active brain!
 
-This drops a tiny `AGENTS.md` redirect file in your codebase that instructs AI agents to read context from the Central Brain. Every time you commit, the local daemon wakes up and routes all the generated context directly into your Brain repository!
+This drops a tiny `AGENTS.md` redirect file in your codebase that instructs AI agents to read context from the Central Brain. Every time you push or commit, the local daemon wakes up and routes all the generated context directly into your Brain repository!
 
-[Read the full Architecture Reference here.](docs/central_brain_architecture.md)
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
-### What You Get
+### 📁 What You Get
 
-```
+A beautifully structured, self-governing memory filesystem out-of-the-box.
+
+```text
 vault/
 ├── AGENTS.md                 # Root governance (all providers read this)
-├── projects/                   # Active work
-├── people/                     # Contacts (never archived)
-├── meetings/                   # Meeting notes
-├── decisions/                  # Architecture decisions
-├── goals/                      # OKRs and objectives
-├── resources/                  # Bookmarks, articles
-├── experiments/                # Ephemeral prototypes
-├── threads/                    # Conversation histories
-├── reviews/                    # Retrospectives
-├── templates/                  # Markdown templates
+├── projects/                 # Active work
+├── people/                   # Contacts (never archived)
+├── meetings/                 # Meeting notes
+├── decisions/                # Architecture decisions
+├── goals/                    # OKRs and objectives
+├── resources/                # Bookmarks, articles
+├── experiments/              # Ephemeral prototypes
+├── threads/                  # Conversation histories
+├── reviews/                  # Retrospectives
+├── templates/                # Markdown templates
 ├── .vault/
-│   ├── skills/                 # Executable agent skills
-│   ├── registry/               # Capability registry
-│   ├── staging/                # Pending writes (dev branch)
-│   ├── archive/                # Hidden — 120-day+ files
-│   ├── index/                  # Search indices
-│   └── schemas/                # Validation schemas
+│   ├── skills/               # Executable agent skills
+│   ├── registry/             # Capability registry
+│   ├── staging/              # Pending writes (dev branch)
+│   ├── archive/              # Hidden — 120-day+ files
+│   ├── index/                # Search indices
+│   └── schemas/              # Validation schemas
 └── .github/workflows/
-    └── auto-archive.yml        # Weekly maintenance
+    └── auto-archive.yml      # Weekly maintenance
 ```
 
----
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
-## Core Concepts
+### 🏗️ Architecture Flow
 
-### 1. Git Branching for Agent Safety
+<div align="center">
+  <code>User Prompt</code> → <code>Agent writes via MCP</code> → <code>Staged to 'dev' branch</code> → <code>Nightly PR raised</code> → <code>Human merges to 'main'</code>
+</div>
 
-All agent writes go to `dev`. Human approval merges to `main`.
+<br>
 
-```
-User prompt → Agent writes → Staged to dev → PR raised → Human merges → main
-```
-
-```bash
-vault stage path/to/file.md "# New content" --agent claude
-vault promote                    # Merge dev → main
-```
-
-### 2. Contextual Directories
-
-Your life is organized into 10+ contextual buckets. Each has its own archive rules, templates, and frontmatter requirements.
-
-| Directory | Purpose | Archive | Never Archive |
-|-----------|---------|---------|---------------|
-| `projects/` | Active work | 120 days | — |
-| `people/` | Contacts | Never | ✓ |
-| `decisions/` | ADRs | Never | ✓ |
-| `experiments/` | Prototypes | 30 days | — |
-| `meetings/` | Notes | 90 days | — |
-| `threads/` | Conversations | 120 days | — |
-
-### 3. Archive Engine
-
-Files older than their threshold automatically move to `.vault/archive/YYYY/MM/` with preserved metadata. Tombstones remain in place for traceability.
-
-```bash
-vault archive --dry-run          # Preview what would archive
-vault archive --threshold 90     # Archive files older than 90 days
-vault archive --list             # View archived files
+```mermaid
+graph TD
+    A[MCP CLIENTS<br>Claude, Cursor, Codex] -->|Tools| B(MCP Server vault.mcp)
+    B --> C{Core Engines}
+    C -->|.index| D[Search Engine]
+    C -->|.archive 120d| E[Archive Engine]
+    C -->|dev/main PR| F[Git Workflow]
+    C -->|Hooks & Harvest| G[Daemon]
+    D --> H[(VAULT FS)]
+    E --> H
+    F --> H
+    G --> H
 ```
 
-### 4. Capability Registry
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
-Self-documenting skills that any provider can discover and execute.
-
-```bash
-vault registry --list            # List all skills
-vault registry --provider claude # Filter by provider
-```
-
-### 5. MCP Server (Any Provider)
-
-Expose your vault to Claude, Cursor, Codex, or any MCP client.
-
-```bash
-vault mcp --install              # Install to Claude/Cursor
-vault mcp --run                  # Start MCP server
-```
-
-**Available MCP Tools:**
-- `vault_search` — Semantic + keyword search
-- `vault_read` — Read any file
-- `vault_write` — Stage write to dev branch
-- `vault_archive` — Run archive engine
-- `vault_health` — Full health check
-- `vault_status` — Git status
-- `vault_skills` — List capabilities
-- `vault_new` — Create from template
-- `vault_related` — Find related files
-
----
-
-## CLI Commands
+### 🛠️ CLI Commands
 
 ```bash
 # Initialize
 vault init                       # Create new vault in current directory
-vault init ~/my-vault --name my-vault # Custom path and name
+vault init ~/my-vault            # Custom path
 
 # Status & Health
 vault status                     # Git + health overview
@@ -161,71 +149,28 @@ vault health --report            # Full diagnostic report
 # Search
 vault search "kubernetes"        # Keyword search
 vault search "design" --semantic # Semantic rerank
-vault search "agents" -d projects -d people  # Limit directories
 
 # Archive
 vault archive                    # Archive stale files
 vault archive --dry-run          # Preview only
-vault archive --list             # List archived
 
 # Registry
 vault registry --list            # All skills
-vault registry --provider codex   # Filtered
-
-# Cron (Scheduled Tasks)
-vault cron --enable              # Start scheduler
-vault cron --disable             # Stop scheduler
-vault cron --status              # Show jobs
-vault cron --edit                # Edit cron.yaml
 
 # MCP
 vault mcp --install              # Auto-configure Claude/Cursor
 vault mcp --run                  # Start stdio server
-
-
-# Create Entries
-vault new project "NeeVibe"     # From template
-vault new person "Alice Chen"   # From template
-vault new meeting "Sprint Review"
-
-# Index
-vault index                      # Build search index
 ```
 
----
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
-## Configuration
+### 📜 AGENTS.md Governance
 
-Edit `.vault/config.yaml`:
+Every vault has a root `AGENTS.md` that **ALL** AI providers must read before acting. It strictly defines:
 
-```yaml
-version: "1.0"
-auto_archive_days: 120
-archive_hidden: true
-
-directories:
-  - name: "projects"
-    description: "Active work"
-    path: "/home/user/vault/projects"
-    vault_path: "/home/user/vault/projects"
-    archive_after_days: 120
-    required_frontmatter: [id, created, modified, tags, status, source]
-    templates: ["vault/templates/project.md"]
-  
-  - name: "people"
-    description: "Contacts"
-    path: "/home/user/vault/people"
-    vault_path: "/home/user/vault/people"
-    archive_after_days: 0  # Never archive
-```
-
----
-
-## AGENTS.md Governance
-
-Every vault has a root `AGENTS.md` that ALL providers must read before acting. It defines:
-
-1. **Branch Rule** — All writes to `dev`, never `main`
+1. **Branch Rule** — All writes go to `dev`, never `main`
 2. **Approval Gate** — Stage to `.vault/staging/`, raise PR
 3. **Schema Rule** — Every file needs frontmatter
 4. **Archive Rule** — Old files move to `.vault/archive/`
@@ -233,94 +178,10 @@ Every vault has a root `AGENTS.md` that ALL providers must read before acting. I
 6. **No Secrets** — Never store tokens in vault files
 7. **Cross-Reference** — Use `[[WikiLinks]]` between entries
 
-Nested directories can have their own `AGENTS.md` that supplements (not overrides) root rules.
+<br>
+<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));" />
+<br>
 
----
-
-## GitHub Actions
-
-Auto-archive and health checks run weekly via GitHub Actions:
-
-```yaml
-# .github/workflows/auto-archive.yml
-- Runs every Sunday at 2am UTC
-- Archives stale files
-- Runs health check
-- Raises PR to main for human approval
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     MCP CLIENTS                             │
-│  Claude    Cursor    Codex    OpenAI    Any LLM             │
-│     │         │        │         │          │                │
-└─────┼─────────┼────────┼─────────┼──────────┼──────────────┘
-      │         │        │         │          │
-      └─────────┴────────┴─────────┴──────────┘
-                          │
-                          ▼
-              ┌─────────────────────┐
-              │   MCP Server        │
-              │   (vault.mcp)       │
-              └─────────────────────┘
-                          │
-              ┌─────────┼───────────┼───────────┐
-              ▼           ▼           ▼           ▼
-        ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
-        │ Search  │  │ Archive │  │  Git    │  │ Daemon  │
-        │ Engine  │  │ Engine  │  │ Workflow│  │ (Hooks &│
-        │(.index) │  │(.archive│  │(dev/main│  │ Harvest)│
-        └─────────┘  │ 120d)   │  │   PR)   │  └─────────┘
-                   └─────────┘  └─────────┘
-                          │
-                          ▼
-              ┌─────────────────────┐
-              │      VAULT FS       │
-              │                     │
-              │  projects/          │
-              │  people/            │
-              │  decisions/         │
-              │  meetings/          │
-              │  resources/         │
-              │  goals/             │
-              │  reviews/           │
-              │  experiments/       │
-              │  threads/           │
-              │                     │
-              │  .vault/skills/     │
-              │  .vault/registry/   │
-              │  .vault/staging/    │
-              │  .vault/archive/    │
-              │  .vault/index/      │
-              └─────────────────────┘
-```
-
----
-
-## Development
-
-```bash
-# Clone
-git clone https://github.com/pisigmac/agentdrive.git
-cd agentdrive
-
-# Install
-pip install -e ".[dev]"
-
-# Test
-pytest tests/ -v
-
-# Lint
-ruff check vault/
-black vault/
-```
-
----
-
-## License
-
-MIT
+<div align="center">
+  <p>Built for the autonomous future. Licensed under <b>MIT</b>.</p>
+</div>
