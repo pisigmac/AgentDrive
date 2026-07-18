@@ -1259,11 +1259,11 @@ def pull(path: str) -> None:
     compiled_text = f"# Global Memory Context\nPulled from Central Brain: `{brain_path.name}`\n\n"
     
     files_pulled = 0
-    for category in ["decisions", "goals"]:
+    for category in ["projects", "decisions", "goals"]:
         category_dir = brain_path / category
         if category_dir.exists():
             compiled_text += f"## {category.title()}\n\n"
-            for md_file in category_dir.glob("*.md"):
+            for md_file in category_dir.rglob("*.md"):
                 content = md_file.read_text(errors="ignore")
                 compiled_text += f"### {md_file.name}\n{content}\n\n---\n\n"
                 files_pulled += 1
@@ -1284,6 +1284,61 @@ def pull(path: str) -> None:
         gitignore.write_text(gitignore.read_text().rstrip() + "\n.vault/\n")
         
     console.print(f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]")
+
+
+@cli.command()
+@click.option("--deploy", is_flag=True, help="Deploy the UI to the active Central Brain")
+def dashboard(deploy: bool) -> None:
+    """Deploy the Central Brain Web UI."""
+    if not deploy:
+        console.print("[yellow]Use --deploy to deploy the dashboard to your Central Brain.[/yellow]")
+        return
+
+    import json
+    import shutil
+    
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    brain_path = None
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            if global_config.get("active_brain"):
+                brain_path = Path(global_config.get("active_brain")).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        console.print("[red]Error:[/red] No Central Brain is currently linked.")
+        sys.exit(1)
+
+    console.print(f"[bold green]Deploying Dashboard to:[/bold green] {brain_path}")
+    
+    templates_dir = Path(__file__).parent.parent / "templates"
+    ui_src = templates_dir / "ui"
+    workflow_src = templates_dir / "deploy-ui.yml"
+    
+    if not ui_src.exists() or not workflow_src.exists():
+        console.print("[red]Error:[/red] UI templates not found in AgentDrive installation.")
+        sys.exit(1)
+        
+    ui_dest = brain_path / "ui"
+    if ui_dest.exists():
+        shutil.rmtree(ui_dest)
+    shutil.copytree(ui_src, ui_dest)
+    
+    workflows_dir = brain_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(workflow_src, workflows_dir / "deploy-ui.yml")
+    
+    import subprocess
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    
+    subprocess.run(["git", "add", "ui", ".github/workflows/deploy-ui.yml"], cwd=brain_path, env=clean_env)
+    subprocess.run(["git", "commit", "-m", "feat: deploy Central Brain dashboard UI"], cwd=brain_path, env=clean_env)
+    subprocess.run(["git", "push", "origin", "dev"], cwd=brain_path, env=clean_env)
+    
+    console.print("[bold cyan]Dashboard successfully deployed![/bold cyan]")
+    console.print("GitHub Actions is now building your dashboard. It will be available on GitHub Pages shortly.")
 
 
 if __name__ == "__main__":

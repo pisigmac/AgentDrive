@@ -160,6 +160,11 @@ vault registry --list            # All skills
 # MCP
 vault mcp --install              # Auto-configure Claude/Cursor
 vault mcp --run                  # Start stdio server
+
+# Dashboard & Sync
+vault dashboard --deploy         # Deploy Web UI to Central Brain
+vault pull                       # Pull global memory locally
+vault stats                      # View contribution analytics
 ```
 
 <br>

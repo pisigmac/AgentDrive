@@ -126,7 +126,12 @@ class VaultDaemon:
         """Rebuild master overview if stale (>1 hour)."""
         workspace = self.project.parent
         master_state = workspace / ".vault-daemon-master.state"
-        master_output = workspace / "master-overview.md"
+        
+        brain_projects = self.project / "projects"
+        if brain_projects.exists() and brain_projects.is_dir():
+            master_output = self.project / "master-overview.md"
+        else:
+            master_output = workspace / "master-overview.md"
 
         last_build = None
         if master_state.exists():
@@ -140,12 +145,21 @@ class VaultDaemon:
             return
 
         vaults = []
-        for entry in sorted(workspace.iterdir()):
-            if entry.is_dir() and not entry.name.startswith("."):
-                if (entry / ".vault" / "config.yaml").exists():
+        
+        # 1. If this is a Central Brain, collect all linked projects
+        brain_projects = self.project / "projects"
+        if brain_projects.exists() and brain_projects.is_dir():
+            for entry in sorted(brain_projects.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("."):
                     vaults.append(entry)
+        else:
+            # 2. Standalone scan: look for local .vault folders
+            for entry in sorted(workspace.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("."):
+                    if (entry / ".vault" / "config.yaml").exists():
+                        vaults.append(entry)
 
-        if len(vaults) < 2:
+        if not vaults:
             return
 
         self._generate_master_overview(vaults, master_output)
@@ -454,8 +468,17 @@ class VaultDaemon:
         projects_data = []
         for vault in vaults:
             p: dict[str, Any] = {"name": vault.name}
+            
+            # If vault is a CentralBrain project folder (e.g. CentralBrain/projects/AgentOS), files are direct.
+            # If vault is a standalone repo (e.g. dummy/), files are in .vault/projects/
+            if (vault / "tech-stack.md").exists() or (vault / f"{vault.name}.md").exists():
+                data_dir = vault
+                commits_dir = vault.parent.parent / "commits" # CentralBrain/commits
+            else:
+                data_dir = vault / ".vault" / "projects"
+                commits_dir = vault / ".vault" / "commits"
 
-            summary = vault / "projects" / f"{vault.name}.md"
+            summary = data_dir / f"{vault.name}.md"
             if summary.exists():
                 text = summary.read_text()
                 m = re.search(r"\*\*Description:\*\*\s*(.+)", text)
@@ -466,7 +489,7 @@ class VaultDaemon:
                 p["description"] = ""
                 p["status"] = "unknown"
 
-            tech = vault / "projects" / "tech-stack.md"
+            tech = data_dir / "tech-stack.md"
             p["tech"] = []
             if tech.exists():
                 text = tech.read_text()
@@ -474,7 +497,7 @@ class VaultDaemon:
                 if m:
                     p["tech"].append(m.group(1).strip())
 
-            health = vault / "projects" / "health.md"
+            health = data_dir / "health.md"
             p["health"] = "unknown"
             p["issues"] = []
             if health.exists():
@@ -486,13 +509,12 @@ class VaultDaemon:
                     p["issues"] = re.findall(r"- ⚠️\s*(.+)", text)
 
             p["recent_commits"] = 0
-            commits_dir = vault / "commits"
             if commits_dir.exists():
                 for cf in commits_dir.glob("*.md"):
                     text = cf.read_text()
                     p["recent_commits"] += len(re.findall(r"- \*\*\[", text))
 
-            todos = vault / "projects" / "todos.md"
+            todos = data_dir / "todos.md"
             p["todo_count"] = 0
             if todos.exists():
                 text = todos.read_text()

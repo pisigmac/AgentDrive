@@ -1,0 +1,60 @@
+name: Deploy CentralBrain Dashboard
+
+on:
+  push:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ui
+
+      - name: Build UI
+        run: npm run build
+        working-directory: ui
+
+      - name: Move Markdown Data to Dist
+        run: |
+          mkdir -p ui/dist/data
+          # Copy only markdown files from projects, decisions, etc to be served statically
+          find . -name "*.md" -not -path "*/node_modules/*" -not -path "*/ui/*" -not -path "*/.git/*" -exec cp --parents {} ui/dist/data/ \;
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './ui/dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
