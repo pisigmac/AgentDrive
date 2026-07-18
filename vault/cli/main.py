@@ -265,20 +265,36 @@ def link(brain: str | None, path: str) -> None:
 
     # Append generic instruction to AGENTS.md
     agents_md = project_path / "AGENTS.md"
-    debugging_rule = "\n10. **Error Tracking**: Whenever an error is encountered and fixed, you MUST document it in `debugging.md`. Format: `ERROR: <Details> | Date: <date> | Status: <new/re-occur> | Fix: <Fix description>`"
+    template_path = Path(__file__).parent.parent / "templates" / "AGENTS.md"
+
     generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
 
     if agents_md.exists():
         content = agents_md.read_text()
         if "Global system memory is tracked securely" not in content:
             content = content.rstrip() + generic_text
-        if "Error Tracking" not in content and "**Error Tracking**" not in content:
-            content = content.rstrip() + debugging_rule
+
+        # Ensure latest rules are present by pulling from template config
+        if template_path.exists():
+            template_content = template_path.read_text()
+            if "Error Tracking" not in content and "Error Tracking" in template_content:
+                error_rule = [
+                    line for line in template_content.splitlines() if "Error Tracking" in line
+                ][0]
+                content = content.rstrip() + f"\n{error_rule}"
+            if "Startup Scripts" not in content and "Startup Scripts" in template_content:
+                startup_rule = [
+                    line for line in template_content.splitlines() if "Startup Scripts" in line
+                ][0]
+                content = content.rstrip() + f"\n{startup_rule}"
+
         agents_md.write_text(content)
     else:
-        agents_md.write_text(
-            f"# Agent Governance & Context\n\n## Rules{debugging_rule}{generic_text}"
-        )
+        if template_path.exists():
+            base_content = template_path.read_text().rstrip()
+        else:
+            base_content = "# Agent Governance & Context\n\n## Rules"
+        agents_md.write_text(f"{base_content}{generic_text}")
 
     # Ensure GitHub Workflow is written (if it wasn't already generated during init)
     _write_github_workflow(project_path)
@@ -438,37 +454,12 @@ jobs:
 
 def _write_agents_md(vault_path: Path) -> None:
     """Write root AGENTS.md."""
-    content = """# AgentDrive — Agent Governance
+    template_path = Path(__file__).parent.parent / "templates" / "AGENTS.md"
+    if template_path.exists():
+        content = template_path.read_text()
+    else:
+        content = "# AgentDrive — Agent Governance\n\n## Scope\nThis AGENTS.md governs ALL AI providers..."
 
-## Scope
-This AGENTS.md governs ALL AI providers (Claude, Codex, Cursor, OpenAI, etc.)
-accessing this vault via MCP or direct filesystem.
-
-## Rules
-1. **Branch Rule**: All writes go to `dev` branch. Never commit to `main` directly.
-2. **Approval Gate**: Every write must be staged in `.vault/staging/` and raised as a PR.
-3. **Schema Rule**: Every markdown file MUST include frontmatter per its directory config.
-4. **Archive Rule**: Files older than threshold are moved to `.vault/archive/`. Do not delete.
-5. **Attribution Tags**: Every markdown file must include `source: <provider>` and `model: <model-name>` in frontmatter.
-6. **No Raw Secrets**: Never write API keys, tokens, or passwords into any vault file.
-7. **Cross-Reference**: Link related entries with `[[WikiLinks]]` or `related:` frontmatter.
-8. **Confidence Tag**: Mark speculative content with `confidence: low`.
-9. **Git Tracking**: When committing code, you MUST identify your model using the author flag. Example: `git commit --author="AgentDrive (Claude 3.5) <ai@agentdrive.com>"`.
-10. **Error Tracking**: Whenever an error is encountered and fixed, you MUST document it in a `debugging.md` file. Format: `ERROR: <Details> | Date: <date> | Status: <new/re-occur> | Fix: <Fix description>`.
-
-## Directory Quick Reference
-| Directory | Purpose | Archive | Template |
-|-----------|---------|---------|----------|
-| projects/ | Active work | 120d | templates/project.md |
-| people/ | Contacts | Never | templates/person.md |
-| goals/ | OKRs | 365d | templates/goal.md |
-| meetings/ | Meeting notes | 90d | templates/meeting.md |
-| decisions/ | ADRs | Never | templates/decision.md |
-| resources/ | Bookmarks | 180d | templates/resource.md |
-| experiments/ | Prototypes | 30d | templates/experiment.md |
-| threads/ | Conversations | 120d | templates/thread.md |
-| reviews/ | Retrospectives | 365d | templates/review.md |
-"""
     (vault_path / "AGENTS.md").write_text(content)
 
 
