@@ -1226,5 +1226,65 @@ def stats(path: str) -> None:
     console.print(src_table)
 
 
+@cli.command()
+@click.option("--path", default=".", help="Project path")
+def pull(path: str) -> None:
+    """Pull global decisions and goals from the Central Brain into local context."""
+    import json
+    from pathlib import Path
+
+    project_path = Path(path).resolve()
+    
+    # Resolve brain path
+    brain_path = None
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            links = global_config.get("links", {})
+            if str(project_path) in links:
+                brain_path = Path(links[str(project_path)]).resolve()
+            elif global_config.get("active_brain"):
+                brain_path = Path(global_config.get("active_brain")).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        console.print("[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first.")
+        sys.exit(1)
+        
+    console.print(f"[bold]Pulling global context from:[/bold] {brain_path}")
+    
+    # Collect files
+    compiled_text = f"# Global Memory Context\nPulled from Central Brain: `{brain_path.name}`\n\n"
+    
+    files_pulled = 0
+    for category in ["decisions", "goals"]:
+        category_dir = brain_path / category
+        if category_dir.exists():
+            compiled_text += f"## {category.title()}\n\n"
+            for md_file in category_dir.glob("*.md"):
+                content = md_file.read_text(errors="ignore")
+                compiled_text += f"### {md_file.name}\n{content}\n\n---\n\n"
+                files_pulled += 1
+                
+    if files_pulled == 0:
+        console.print("[yellow]No decisions or goals found in the Central Brain to pull.[/yellow]")
+        return
+        
+    local_vault = project_path / ".vault"
+    local_vault.mkdir(exist_ok=True)
+    
+    dest = local_vault / "global-memory.md"
+    dest.write_text(compiled_text)
+    
+    # ensure .vault is in gitignore
+    gitignore = project_path / ".gitignore"
+    if gitignore.exists() and ".vault" not in gitignore.read_text():
+        gitignore.write_text(gitignore.read_text().rstrip() + "\n.vault/\n")
+        
+    console.print(f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]")
+
+
 if __name__ == "__main__":
     cli()
