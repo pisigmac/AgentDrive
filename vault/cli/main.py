@@ -311,17 +311,28 @@ def link(brain: str | None, path: str) -> None:
     from vault.core.config import VaultConfig, DirectoryConfig
 
     brain_config = VaultConfig.load(brain_path / ".vault" / "config.yaml")
-    brain_config.directories.append(
-        DirectoryConfig(
-            **{
-                "name": project_path.name,
-                "description": f"Linked project: {project_path.name}",
-                "path": str(project_path),
-                "vault_path": str(brain_path / "projects" / project_path.name),
-            }
+    already_linked = False
+    for d in brain_config.directories:
+        if d.path == str(project_path):
+            already_linked = True
+            break
+
+    if already_linked:
+        console.print(
+            f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain."
         )
-    )
-    brain_config.save(brain_path / ".vault" / "config.yaml")
+    else:
+        brain_config.directories.append(
+            DirectoryConfig(
+                **{
+                    "name": project_path.name,
+                    "description": f"Linked project: {project_path.name}",
+                    "path": str(project_path),
+                    "vault_path": str(brain_path / "projects" / project_path.name),
+                }
+            )
+        )
+        brain_config.save(brain_path / ".vault" / "config.yaml")
 
     console.print(
         "[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!"
