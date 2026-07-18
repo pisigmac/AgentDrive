@@ -227,7 +227,20 @@ class VaultDaemon:
                 break
 
         if not stack:
-            return 0
+            # Fallback: Guess runtime by counting file extensions in root or src
+            counts = {}
+            for root, dirs, files in os.walk(self.project):
+                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"} and not d.startswith(".")]
+                for f in files:
+                    ext = Path(f).suffix
+                    if ext in (".py", ".js", ".ts", ".go", ".rs", ".java"):
+                        counts[ext] = counts.get(ext, 0) + 1
+            if not counts:
+                return 0
+            
+            dominant_ext = max(counts, key=counts.get)
+            ext_map = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".go": "Go", ".rs": "Rust", ".java": "Java"}
+            stack["runtime"] = ext_map.get(dominant_ext, "Unknown")
 
         body = f"# Tech Stack: {self.project.name}\n\n"
         for k, v in stack.items():
@@ -257,11 +270,12 @@ class VaultDaemon:
                 break
 
         if not found:
-            return 0
+            found = self.project
 
+        skip = {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"}
         lines = []
         for root, dirs, files in os.walk(found):
-            dirs[:] = [d for d in dirs if not self._is_ignored(Path(root) / d) and not d.startswith(".")]
+            dirs[:] = [d for d in dirs if d not in skip and not self._is_ignored(Path(root) / d) and not d.startswith(".")]
             depth = root.replace(str(found), "").count(os.sep)
             if depth > 2:
                 del dirs[:]
