@@ -26,3 +26,5 @@ accessing this vault via MCP or direct filesystem.
 | experiments/ | Prototypes | 30d | templates/experiment.md |
 | threads/ | Conversations | 120d | templates/thread.md |
 | reviews/ | Retrospectives | 365d | templates/review.md |
+9. **Broadcast**: Error Tracking: Whenever an error is encountered and fixed, document it in debugging.md. Format: ERROR: <Details> | Date: <date> | Status: <new/re-occur> | Fix: <Fix>
+10. **Broadcast**: Startup Scripts: If start_all.sh and stop_all.sh scripts do not exist in the repository, you MUST create them to manage the project's services.

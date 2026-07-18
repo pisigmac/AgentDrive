@@ -1289,6 +1289,53 @@ def pull(path: str) -> None:
 
 
 @cli.command()
+@click.argument("message", type=str)
+def push(message: str) -> None:
+    """Push an instruction to all linked projects' AGENTS.md."""
+    try:
+        from vault.core.config import VaultConfig
+
+        config_path = Path(".vault/config.yaml")
+        if not config_path.exists():
+            console.print(
+                "[red]Error: You must run this command from the root of a Central Brain.[/red]"
+            )
+            return
+
+        config = VaultConfig.load(config_path)
+
+        console.print(
+            f"[bold blue]Pushing instruction to {len(config.directories)} projects...[/bold blue]"
+        )
+
+        for directory in config.directories:
+            project_path = Path(directory.path)
+            agents_md = project_path / "AGENTS.md"
+            if agents_md.exists():
+                content = agents_md.read_text().rstrip()
+                # Determine the next rule number
+                lines = content.splitlines()
+                rule_number = 1
+                for line in lines:
+                    if line.strip().split(".")[0].isdigit():
+                        rule_number = max(rule_number, int(line.strip().split(".")[0]) + 1)
+
+                new_rule = f"\n{rule_number}. **Broadcast**: {message}"
+                agents_md.write_text(content + new_rule + "\n")
+                console.print(f"[green]✓[/green] Updated {project_path.name}")
+            else:
+                console.print(
+                    f"[yellow]⚠[/yellow] Skipped {project_path.name} (no AGENTS.md found)"
+                )
+
+        console.print("[bold green]Push complete![/bold green]")
+
+    except Exception as e:
+        console.print(f"[red]Error pushing instruction: {e}[/red]")
+        return
+
+
+@cli.command()
 @click.option("--deploy", is_flag=True, help="Deploy the UI to the active Central Brain")
 def dashboard(deploy: bool) -> None:
     """Deploy the Central Brain Web UI."""
