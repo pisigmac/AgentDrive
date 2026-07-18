@@ -46,13 +46,14 @@ class VaultDaemon:
 
     def _is_ignored(self, path: Path) -> bool:
         import fnmatch
+
         try:
             rel_str = str(path.relative_to(self.project))
         except ValueError:
             return False
-            
+
         name = path.name
-        
+
         for pat in self.ignore_patterns:
             if fnmatch.fnmatch(rel_str, pat) or fnmatch.fnmatch(name, pat):
                 return True
@@ -126,7 +127,7 @@ class VaultDaemon:
         """Rebuild master overview if stale (>1 hour)."""
         workspace = self.project.parent
         master_state = workspace / ".vault-daemon-master.state"
-        
+
         brain_projects = self.project / "projects"
         if brain_projects.exists() and brain_projects.is_dir():
             master_output = self.project / "master-overview.md"
@@ -145,7 +146,7 @@ class VaultDaemon:
             return
 
         vaults = []
-        
+
         # 1. If this is a Central Brain, collect all linked projects
         brain_projects = self.project / "projects"
         if brain_projects.exists() and brain_projects.is_dir():
@@ -244,16 +245,38 @@ class VaultDaemon:
             # Fallback: Guess runtime by counting file extensions in root or src
             counts = {}
             for root, dirs, files in os.walk(self.project):
-                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"} and not d.startswith(".")]
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if d
+                    not in {
+                        ".git",
+                        "node_modules",
+                        ".venv",
+                        "venv",
+                        "__pycache__",
+                        ".vault",
+                        "dist",
+                        "build",
+                    }
+                    and not d.startswith(".")
+                ]
                 for f in files:
                     ext = Path(f).suffix
                     if ext in (".py", ".js", ".ts", ".go", ".rs", ".java"):
                         counts[ext] = counts.get(ext, 0) + 1
             if not counts:
                 return 0
-            
+
             dominant_ext = max(counts, key=counts.get)
-            ext_map = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".go": "Go", ".rs": "Rust", ".java": "Java"}
+            ext_map = {
+                ".py": "Python",
+                ".js": "JavaScript",
+                ".ts": "TypeScript",
+                ".go": "Go",
+                ".rs": "Rust",
+                ".java": "Java",
+            }
             stack["runtime"] = ext_map.get(dominant_ext, "Unknown")
 
         body = f"# Tech Stack: {self.project.name}\n\n"
@@ -289,7 +312,11 @@ class VaultDaemon:
         skip = {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"}
         lines = []
         for root, dirs, files in os.walk(found):
-            dirs[:] = [d for d in dirs if d not in skip and not self._is_ignored(Path(root) / d) and not d.startswith(".")]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in skip and not self._is_ignored(Path(root) / d) and not d.startswith(".")
+            ]
             depth = root.replace(str(found), "").count(os.sep)
             if depth > 2:
                 del dirs[:]
@@ -297,8 +324,12 @@ class VaultDaemon:
             rel = Path(root).relative_to(found)
             indent = "  " * depth
             lines.append(f"{indent}{rel}/")
-            
-            valid_files = [f for f in sorted(files) if not f.startswith(".") and not self._is_ignored(Path(root) / f)]
+
+            valid_files = [
+                f
+                for f in sorted(files)
+                if not f.startswith(".") and not self._is_ignored(Path(root) / f)
+            ]
             for f in valid_files[:20]:
                 lines.append(f"{indent}  {f}")
             if len(valid_files) > 20:
@@ -379,7 +410,11 @@ class VaultDaemon:
         todos = []
 
         for root, dirs, files in os.walk(self.project):
-            dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".") and not self._is_ignored(Path(root) / d)]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in skip and not d.startswith(".") and not self._is_ignored(Path(root) / d)
+            ]
             for f in files:
                 if self._is_ignored(Path(root) / f):
                     continue
@@ -468,12 +503,12 @@ class VaultDaemon:
         projects_data = []
         for vault in vaults:
             p: dict[str, Any] = {"name": vault.name}
-            
+
             # If vault is a CentralBrain project folder (e.g. CentralBrain/projects/AgentOS), files are direct.
             # If vault is a standalone repo (e.g. dummy/), files are in .vault/projects/
             if (vault / "tech-stack.md").exists() or (vault / f"{vault.name}.md").exists():
                 data_dir = vault
-                commits_dir = vault.parent.parent / "commits" # CentralBrain/commits
+                commits_dir = vault.parent.parent / "commits"  # CentralBrain/commits
             else:
                 data_dir = vault / ".vault" / "projects"
                 commits_dir = vault / ".vault" / "commits"

@@ -220,10 +220,10 @@ def link(brain: str | None, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
-        
+
         # Write and stage workflow on main branch first
         _write_github_workflow(project_path)
-        
+
         subprocess.run(
             ["git", "commit", "-m", "chore: initial repository creation"],
             cwd=project_path,
@@ -1146,7 +1146,7 @@ def stats(path: str) -> None:
     from rich.table import Table
 
     project_path = Path(path).resolve()
-    
+
     # Resolve brain path
     brain_path = None
     global_config_path = Path.home() / ".agentdrive" / "config.json"
@@ -1156,7 +1156,7 @@ def stats(path: str) -> None:
             brain_path = global_config.get("active_brain")
             if brain_path:
                 brain_path = Path(brain_path).resolve()
-            
+
             if not brain_path:
                 links = global_config.get("links", {})
                 if str(project_path) in links:
@@ -1174,11 +1174,11 @@ def stats(path: str) -> None:
     console.print(f"[bold]Analyzing Brain:[/bold] {brain_path}\n")
 
     counts = {"total": 0, "sources": {}, "directories": {}, "low_confidence": 0}
-    
+
     for root, dirs, files in os.walk(brain_path):
         if ".git" in root or ".vault" in root:
             continue
-        
+
         dirname = Path(root).name
         if dirname not in counts["directories"] and dirname != brain_path.name:
             counts["directories"][dirname] = 0
@@ -1186,7 +1186,7 @@ def stats(path: str) -> None:
         for f in files:
             if not f.endswith(".md"):
                 continue
-            
+
             filepath = Path(root) / f
             try:
                 content = filepath.read_text(errors="ignore")
@@ -1203,7 +1203,7 @@ def stats(path: str) -> None:
                 counts["sources"][src] = counts["sources"].get(src, 0) + 1
             else:
                 counts["sources"]["human"] = counts["sources"].get("human", 0) + 1
-                
+
             conf_match = re.search(r"^confidence:\s*low", content, re.MULTILINE | re.IGNORECASE)
             if conf_match:
                 counts["low_confidence"] += 1
@@ -1214,15 +1214,15 @@ def stats(path: str) -> None:
 
     table.add_row("Total Markdown Files", str(counts["total"]))
     table.add_row("Low Confidence Files", str(counts["low_confidence"]))
-    
+
     console.print(table)
-    
+
     src_table = Table(title="Contributions by Source")
     src_table.add_column("Source", style="green")
     src_table.add_column("Files", style="yellow")
     for src, count in sorted(counts["sources"].items(), key=lambda x: x[1], reverse=True):
         src_table.add_row(src, str(count))
-        
+
     console.print(src_table)
 
 
@@ -1234,7 +1234,7 @@ def pull(path: str) -> None:
     from pathlib import Path
 
     project_path = Path(path).resolve()
-    
+
     # Resolve brain path
     brain_path = None
     global_config_path = Path.home() / ".agentdrive" / "config.json"
@@ -1250,14 +1250,16 @@ def pull(path: str) -> None:
             pass
 
     if not brain_path:
-        console.print("[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first.")
+        console.print(
+            "[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first."
+        )
         sys.exit(1)
-        
+
     console.print(f"[bold]Pulling global context from:[/bold] {brain_path}")
-    
+
     # Collect files
     compiled_text = f"# Global Memory Context\nPulled from Central Brain: `{brain_path.name}`\n\n"
-    
+
     files_pulled = 0
     for category in ["projects", "decisions", "goals"]:
         category_dir = brain_path / category
@@ -1267,23 +1269,25 @@ def pull(path: str) -> None:
                 content = md_file.read_text(errors="ignore")
                 compiled_text += f"### {md_file.name}\n{content}\n\n---\n\n"
                 files_pulled += 1
-                
+
     if files_pulled == 0:
         console.print("[yellow]No decisions or goals found in the Central Brain to pull.[/yellow]")
         return
-        
+
     local_vault = project_path / ".vault"
     local_vault.mkdir(exist_ok=True)
-    
+
     dest = local_vault / "global-memory.md"
     dest.write_text(compiled_text)
-    
+
     # ensure .vault is in gitignore
     gitignore = project_path / ".gitignore"
     if gitignore.exists() and ".vault" not in gitignore.read_text():
         gitignore.write_text(gitignore.read_text().rstrip() + "\n.vault/\n")
-        
-    console.print(f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]")
+
+    console.print(
+        f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]"
+    )
 
 
 @cli.command()
@@ -1291,12 +1295,14 @@ def pull(path: str) -> None:
 def dashboard(deploy: bool) -> None:
     """Deploy the Central Brain Web UI."""
     if not deploy:
-        console.print("[yellow]Use --deploy to deploy the dashboard to your Central Brain.[/yellow]")
+        console.print(
+            "[yellow]Use --deploy to deploy the dashboard to your Central Brain.[/yellow]"
+        )
         return
 
     import json
     import shutil
-    
+
     global_config_path = Path.home() / ".agentdrive" / "config.json"
     brain_path = None
     if global_config_path.exists():
@@ -1312,33 +1318,42 @@ def dashboard(deploy: bool) -> None:
         sys.exit(1)
 
     console.print(f"[bold green]Deploying Dashboard to:[/bold green] {brain_path}")
-    
+
     templates_dir = Path(__file__).parent.parent / "templates"
     ui_src = templates_dir / "ui"
     workflow_src = templates_dir / "deploy-ui.yml"
-    
+
     if not ui_src.exists() or not workflow_src.exists():
         console.print("[red]Error:[/red] UI templates not found in AgentDrive installation.")
         sys.exit(1)
-        
+
     ui_dest = brain_path / "ui"
     if ui_dest.exists():
         shutil.rmtree(ui_dest)
     shutil.copytree(ui_src, ui_dest)
-    
+
     workflows_dir = brain_path / ".github" / "workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(workflow_src, workflows_dir / "deploy-ui.yml")
-    
+
     import subprocess
+
     clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    
-    subprocess.run(["git", "add", "ui", ".github/workflows/deploy-ui.yml"], cwd=brain_path, env=clean_env)
-    subprocess.run(["git", "commit", "-m", "feat: deploy Central Brain dashboard UI"], cwd=brain_path, env=clean_env)
+
+    subprocess.run(
+        ["git", "add", "ui", ".github/workflows/deploy-ui.yml"], cwd=brain_path, env=clean_env
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: deploy Central Brain dashboard UI"],
+        cwd=brain_path,
+        env=clean_env,
+    )
     subprocess.run(["git", "push", "origin", "dev"], cwd=brain_path, env=clean_env)
-    
+
     console.print("[bold cyan]Dashboard successfully deployed![/bold cyan]")
-    console.print("GitHub Actions is now building your dashboard. It will be available on GitHub Pages shortly.")
+    console.print(
+        "GitHub Actions is now building your dashboard. It will be available on GitHub Pages shortly."
+    )
 
 
 if __name__ == "__main__":
