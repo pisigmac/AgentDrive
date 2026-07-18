@@ -141,30 +141,33 @@ graph TD
 # Initialize
 vault init                       # Create new vault in current directory
 vault init ~/my-vault            # Custom path
+vault brain ~/AgentDriveBrain    # Set a path as the Central Brain
+vault link                       # Link current project to Central Brain
 
 # Status & Health
 vault status                     # Git + health overview
 vault health --report            # Full diagnostic report
+vault stats                      # View contribution analytics
 
-# Search
+# Content Management
+vault new "System Design"        # Create an entry from template
+vault stage path/to/file.md      # Stage a file write to dev branch
+vault promote                    # Promote staged files from dev to main
+vault pull                       # Pull global context from Central Brain
+
+# Search & Data
 vault search "kubernetes"        # Keyword search
 vault search "design" --semantic # Semantic rerank
+vault index                      # Build local search index
+vault archive                    # Archive stale vault content
 
-# Archive
-vault archive                    # Archive stale files
-vault archive --dry-run          # Preview only
-
-# Registry
-vault registry --list            # All skills
-
-# MCP
+# Automation & Integrations
+vault daemon                     # Trigger event-driven context harvest
+vault cron --setup               # Manage scheduled vault tasks
+vault registry --list            # Manage agent capability registry
 vault mcp --install              # Auto-configure Claude/Cursor
 vault mcp --run                  # Start stdio server
-
-# Dashboard & Sync
-vault dashboard --deploy         # Deploy Web UI to Central Brain
-vault pull                       # Pull global memory locally
-vault stats                      # View contribution analytics
+vault dashboard --deploy         # Deploy Central Brain Web UI
 ```
 
 <br>
