@@ -11,11 +11,11 @@ test-cov:
 
 lint:
 	ruff check vault/
-	black --check vault/
+	black --check --target-version py311 vault/
 
 format:
-	black vault/
 	ruff check --fix vault/
+	black --target-version py311 vault/
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache htmlcov .coverage

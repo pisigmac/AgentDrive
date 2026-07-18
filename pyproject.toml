@@ -9,7 +9,7 @@ description = "Filesystem-as-Memory for AI Agents. Any provider."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Jason Liu", email = "jxnl@example.com"},
+    {name = "pisigmac", email = "sigmapi1@outlook.com"},
 ]
 requires-python = ">=3.10"
 classifiers = [
@@ -48,6 +48,7 @@ packages = ["vault"]
 
 [tool.black]
 line-length = 100
+target-version = ["py311"]
 
 [tool.ruff]
 line-length = 100
