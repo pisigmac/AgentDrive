@@ -1134,5 +1134,96 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
     vd.run(trigger)
 
 
+@cli.command()
+@click.option("--path", default=".", help="Project path")
+def stats(path: str) -> None:
+    """Show analytics and stats for the AgentDrive brain."""
+    import os
+    import re
+    import json
+    from pathlib import Path
+    from rich.table import Table
+
+    project_path = Path(path).resolve()
+    
+    # Resolve brain path
+    brain_path = None
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            brain_path = global_config.get("active_brain")
+            if brain_path:
+                brain_path = Path(brain_path).resolve()
+            
+            if not brain_path:
+                links = global_config.get("links", {})
+                if str(project_path) in links:
+                    brain_path = Path(links[str(project_path)]).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        if (project_path / ".vault" / "config.yaml").exists():
+            brain_path = project_path / ".vault"
+        else:
+            console.print("[red]Error:[/red] No active brain or local vault found.")
+            sys.exit(1)
+
+    console.print(f"[bold]Analyzing Brain:[/bold] {brain_path}\n")
+
+    counts = {"total": 0, "sources": {}, "directories": {}, "low_confidence": 0}
+    
+    for root, dirs, files in os.walk(brain_path):
+        if ".git" in root or ".vault" in root:
+            continue
+        
+        dirname = Path(root).name
+        if dirname not in counts["directories"] and dirname != brain_path.name:
+            counts["directories"][dirname] = 0
+
+        for f in files:
+            if not f.endswith(".md"):
+                continue
+            
+            filepath = Path(root) / f
+            try:
+                content = filepath.read_text(errors="ignore")
+            except Exception:
+                continue
+
+            counts["total"] += 1
+            if dirname != brain_path.name:
+                counts["directories"][dirname] = counts["directories"].get(dirname, 0) + 1
+
+            source_match = re.search(r"^source:\s*(.+)$", content, re.MULTILINE)
+            if source_match:
+                src = source_match.group(1).strip()
+                counts["sources"][src] = counts["sources"].get(src, 0) + 1
+            else:
+                counts["sources"]["human"] = counts["sources"].get("human", 0) + 1
+                
+            conf_match = re.search(r"^confidence:\s*low", content, re.MULTILINE | re.IGNORECASE)
+            if conf_match:
+                counts["low_confidence"] += 1
+
+    table = Table(title="AgentDrive Statistics")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="magenta")
+
+    table.add_row("Total Markdown Files", str(counts["total"]))
+    table.add_row("Low Confidence Files", str(counts["low_confidence"]))
+    
+    console.print(table)
+    
+    src_table = Table(title="Contributions by Source")
+    src_table.add_column("Source", style="green")
+    src_table.add_column("Files", style="yellow")
+    for src, count in sorted(counts["sources"].items(), key=lambda x: x[1], reverse=True):
+        src_table.add_row(src, str(count))
+        
+    console.print(src_table)
+
+
 if __name__ == "__main__":
     cli()

@@ -32,6 +32,33 @@ class VaultDaemon:
 
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
+        self.ignore_patterns = self._load_ignore_patterns()
+
+    def _load_ignore_patterns(self) -> list[str]:
+        ignore_file = self.project / ".agentignore"
+        patterns = []
+        if ignore_file.exists():
+            for line in ignore_file.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    patterns.append(line)
+        return patterns
+
+    def _is_ignored(self, path: Path) -> bool:
+        import fnmatch
+        try:
+            rel_str = str(path.relative_to(self.project))
+        except ValueError:
+            return False
+            
+        name = path.name
+        
+        for pat in self.ignore_patterns:
+            if fnmatch.fnmatch(rel_str, pat) or fnmatch.fnmatch(name, pat):
+                return True
+            if pat.endswith("/") and fnmatch.fnmatch(name + "/", pat):
+                return True
+        return False
 
     def _load_state(self) -> dict:
         if self.state_file.exists():
@@ -234,6 +261,7 @@ class VaultDaemon:
 
         lines = []
         for root, dirs, files in os.walk(found):
+            dirs[:] = [d for d in dirs if not self._is_ignored(Path(root) / d) and not d.startswith(".")]
             depth = root.replace(str(found), "").count(os.sep)
             if depth > 2:
                 del dirs[:]
@@ -241,11 +269,12 @@ class VaultDaemon:
             rel = Path(root).relative_to(found)
             indent = "  " * depth
             lines.append(f"{indent}{rel}/")
-            for f in sorted(files)[:20]:
-                if not f.startswith("."):
-                    lines.append(f"{indent}  {f}")
-            if len(files) > 20:
-                lines.append(f"{indent}  ... ({len(files) - 20} more)")
+            
+            valid_files = [f for f in sorted(files) if not f.startswith(".") and not self._is_ignored(Path(root) / f)]
+            for f in valid_files[:20]:
+                lines.append(f"{indent}  {f}")
+            if len(valid_files) > 20:
+                lines.append(f"{indent}  ... ({len(valid_files) - 20} more)")
 
         body = (
             f"# Source Structure: {self.project.name}\n\n"
@@ -322,8 +351,10 @@ class VaultDaemon:
         todos = []
 
         for root, dirs, files in os.walk(self.project):
-            dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".")]
+            dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".") and not self._is_ignored(Path(root) / d)]
             for f in files:
+                if self._is_ignored(Path(root) / f):
+                    continue
                 if not f.endswith(
                     (".py", ".js", ".ts", ".tsx", ".jsx", ".rs", ".go", ".java", ".md")
                 ):
