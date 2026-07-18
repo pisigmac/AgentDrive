@@ -443,10 +443,11 @@ accessing this vault via MCP or direct filesystem.
 2. **Approval Gate**: Every write must be staged in `.vault/staging/` and raised as a PR.
 3. **Schema Rule**: Every markdown file MUST include frontmatter per its directory config.
 4. **Archive Rule**: Files older than threshold are moved to `.vault/archive/`. Do not delete.
-5. **Source Tag**: Every file must include `source: <provider>` in frontmatter.
+5. **Attribution Tags**: Every markdown file must include `source: <provider>` and `model: <model-name>` in frontmatter.
 6. **No Raw Secrets**: Never write API keys, tokens, or passwords into any vault file.
 7. **Cross-Reference**: Link related entries with `[[WikiLinks]]` or `related:` frontmatter.
 8. **Confidence Tag**: Mark speculative content with `confidence: low`.
+9. **Git Tracking**: When committing code, you MUST identify your model using the author flag. Example: `git commit --author="AgentDrive (Claude 3.5) <ai@agentdrive.com>"`.
 
 ## Directory Quick Reference
 | Directory | Purpose | Archive | Template |
