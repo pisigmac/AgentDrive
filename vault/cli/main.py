@@ -265,14 +265,20 @@ def link(brain: str | None, path: str) -> None:
 
     # Append generic instruction to AGENTS.md
     agents_md = project_path / "AGENTS.md"
+    debugging_rule = "\n10. **Error Tracking**: Whenever an error is encountered and fixed, you MUST document it in `debugging.md`. Format: `ERROR: <Details> | Date: <date> | Status: <new/re-occur> | Fix: <Fix description>`"
     generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
 
     if agents_md.exists():
         content = agents_md.read_text()
         if "Global system memory is tracked securely" not in content:
-            agents_md.write_text(content.rstrip() + generic_text)
+            content = content.rstrip() + generic_text
+        if "Error Tracking" not in content and "**Error Tracking**" not in content:
+            content = content.rstrip() + debugging_rule
+        agents_md.write_text(content)
     else:
-        agents_md.write_text(f"# Agent Governance & Context{generic_text}")
+        agents_md.write_text(
+            f"# Agent Governance & Context\n\n## Rules{debugging_rule}{generic_text}"
+        )
 
     # Ensure GitHub Workflow is written (if it wasn't already generated during init)
     _write_github_workflow(project_path)
@@ -448,6 +454,7 @@ accessing this vault via MCP or direct filesystem.
 7. **Cross-Reference**: Link related entries with `[[WikiLinks]]` or `related:` frontmatter.
 8. **Confidence Tag**: Mark speculative content with `confidence: low`.
 9. **Git Tracking**: When committing code, you MUST identify your model using the author flag. Example: `git commit --author="AgentDrive (Claude 3.5) <ai@agentdrive.com>"`.
+10. **Error Tracking**: Whenever an error is encountered and fixed, you MUST document it in a `debugging.md` file. Format: `ERROR: <Details> | Date: <date> | Status: <new/re-occur> | Fix: <Fix description>`.
 
 ## Directory Quick Reference
 | Directory | Purpose | Archive | Template |
