@@ -168,6 +168,7 @@ vault registry --list            # Manage agent capability registry
 vault mcp --install              # Auto-configure Claude/Cursor
 vault mcp --run                  # Start stdio server
 vault dashboard --deploy         # Deploy Central Brain Web UI
+vault push "instruction text"    # Broadcast an instruction to all linked projects' AGENTS.md
 ```
 
 <br>
