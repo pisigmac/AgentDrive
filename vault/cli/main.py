@@ -220,8 +220,12 @@ def link(brain: str | None, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
+        
+        # Write and stage workflow on main branch first
+        _write_github_workflow(project_path)
+        
         subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"],
+            ["git", "commit", "-m", "chore: initial repository creation"],
             cwd=project_path,
             capture_output=True,
         )
@@ -270,7 +274,7 @@ def link(brain: str | None, path: str) -> None:
     else:
         agents_md.write_text(f"# Agent Governance & Context{generic_text}")
 
-    # Write GitHub Workflow
+    # Ensure GitHub Workflow is written (if it wasn't already generated during init)
     _write_github_workflow(project_path)
 
     # Gitignore
@@ -409,7 +413,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_DATE=$(date +'%Y-%m-%d')
-          gh pr create --base main --head dev --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the dev sandbox into the main stable branch."
+          gh pr create --base main --head dev --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the dev sandbox into the main stable branch." || echo "PR already exists, changes will automatically appear in the open PR."
 """
 
     workflow_file = workflows_dir / "agentdrive-auto-pr.yml"
