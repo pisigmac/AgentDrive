@@ -304,35 +304,28 @@ def link(brain: str | None, path: str) -> None:
 
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
-
     install_hooks(project_path, python_executable=sys.executable)
 
-    # Update Brain config
-    from vault.core.config import VaultConfig, DirectoryConfig
+    global_dir = Path.home() / ".agentdrive"
+    global_config_path = global_dir / "config.json"
+    
+    global_config = {"links": {}}
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+        except Exception:
+            pass
 
-    brain_config = VaultConfig.load(brain_path / ".vault" / "config.yaml")
-    already_linked = False
-    for d in brain_config.directories:
-        if d.path == str(project_path):
-            already_linked = True
-            break
+    if "links" not in global_config:
+        global_config["links"] = {}
+        
+    already_linked = str(project_path) in global_config["links"].values()
 
     if already_linked:
-        console.print(
-            f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain."
-        )
+        console.print(f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain.")
     else:
-        brain_config.directories.append(
-            DirectoryConfig(
-                **{
-                    "name": project_path.name,
-                    "description": f"Linked project: {project_path.name}",
-                    "path": str(project_path),
-                    "vault_path": str(brain_path / "projects" / project_path.name),
-                }
-            )
-        )
-        brain_config.save(brain_path / ".vault" / "config.yaml")
+        global_config["links"][project_path.name] = str(project_path)
+        global_config_path.write_text(json.dumps(global_config, indent=2))
 
     console.print(
         "[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!"
@@ -1130,8 +1123,12 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
             try:
                 global_config = json.loads(global_config_path.read_text())
                 links = global_config.get("links", {})
-                if str(project_path) in links:
-                    brain_path = Path(links[str(project_path)]).resolve()
+                if str(project_path) in links.values():
+                    # Reverse lookup
+                    for p in links.values():
+                        if str(project_path) == p:
+                            brain_path = Path(global_config.get("active_brain", "")).resolve()
+                            break
             except Exception:
                 pass
 
@@ -1168,8 +1165,12 @@ def stats(path: str) -> None:
 
             if not brain_path:
                 links = global_config.get("links", {})
-                if str(project_path) in links:
-                    brain_path = Path(links[str(project_path)]).resolve()
+                if str(project_path) in links.values():
+                    # Resolve from links
+                    for p_name, p_path in links.items():
+                        if p_path == str(project_path):
+                            brain_path = Path(global_config.get("active_brain", "")).resolve()
+                            break
         except Exception:
             pass
 
@@ -1251,8 +1252,11 @@ def pull(path: str) -> None:
         try:
             global_config = json.loads(global_config_path.read_text())
             links = global_config.get("links", {})
-            if str(project_path) in links:
-                brain_path = Path(links[str(project_path)]).resolve()
+            if str(project_path) in links.values():
+                # Reverse lookup
+                for p in links.values():
+                    if str(project_path) == p:
+                        brain_path = Path(global_config.get("active_brain", "")).resolve()
             elif global_config.get("active_brain"):
                 brain_path = Path(global_config.get("active_brain")).resolve()
         except Exception:
@@ -1303,24 +1307,22 @@ def pull(path: str) -> None:
 @click.argument("message", type=str)
 def push(message: str) -> None:
     """Push an instruction to all linked projects' AGENTS.md."""
+    import json
     try:
-        from vault.core.config import VaultConfig
-
-        config_path = Path(".vault/config.yaml")
-        if not config_path.exists():
-            console.print(
-                "[red]Error: You must run this command from the root of a Central Brain.[/red]"
-            )
+        global_dir = Path.home() / ".agentdrive"
+        global_config_path = global_dir / "config.json"
+        
+        if not global_config_path.exists():
+            console.print("[red]Error: No Central Brain configuration found in ~/.agentdrive/config.json.[/red]")
             return
-
-        config = VaultConfig.load(config_path)
-
-        console.print(
-            f"[bold blue]Pushing instruction to {len(config.directories)} projects...[/bold blue]"
-        )
-
-        for directory in config.directories:
-            project_path = Path(directory.path)
+            
+        global_config = json.loads(global_config_path.read_text())
+        links = global_config.get("links", {})
+        
+        console.print(f"[bold blue]Pushing instruction to {len(links)} projects...[/bold blue]")
+        
+        for name, path_str in links.items():
+            project_path = Path(path_str)
             agents_md = project_path / "AGENTS.md"
             if agents_md.exists():
                 content = agents_md.read_text().rstrip()
@@ -1330,17 +1332,15 @@ def push(message: str) -> None:
                 for line in lines:
                     if line.strip().split(".")[0].isdigit():
                         rule_number = max(rule_number, int(line.strip().split(".")[0]) + 1)
-
+                
                 new_rule = f"\n{rule_number}. **Broadcast**: {message}"
                 agents_md.write_text(content + new_rule + "\n")
-                console.print(f"[green]✓[/green] Updated {project_path.name}")
+                console.print(f"[green]✓[/green] Updated {name}")
             else:
-                console.print(
-                    f"[yellow]⚠[/yellow] Skipped {project_path.name} (no AGENTS.md found)"
-                )
-
+                console.print(f"[yellow]⚠[/yellow] Skipped {name} (no AGENTS.md found)")
+                
         console.print("[bold green]Push complete![/bold green]")
-
+        
     except Exception as e:
         console.print(f"[red]Error pushing instruction: {e}[/red]")
         return
