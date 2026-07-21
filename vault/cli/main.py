@@ -111,6 +111,9 @@ def init(path: str, name: str, force: bool) -> None:
     _write_gitignore(vault_path)
     _write_agentignore(vault_path)
 
+    # Scaffold missing files for daemon quality
+    _scaffold_project_health(vault_path)
+
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
     subprocess.run(
@@ -304,6 +307,9 @@ def link(brain: str | None, path: str) -> None:
     _write_gitignore(project_path)
     _write_agentignore(project_path)
 
+    # Scaffold missing files for daemon quality
+    _scaffold_project_health(project_path)
+
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
 
@@ -339,6 +345,29 @@ def link(brain: str | None, path: str) -> None:
     console.print(
         "[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]"
     )
+
+
+def _scaffold_project_health(project_path: Path) -> None:
+    """Scaffold missing files (README, LICENSE, tests/) to improve daemon harvest quality."""
+    readme = project_path / "README.md"
+    if not readme.exists():
+        readme.write_text(
+            f"# {project_path.name}\n\nWrite a short description of the project here...\n"
+        )
+        console.print("[dim]  Scaffolded README.md[/dim]")
+
+    # Check for tests directory
+    has_tests = any((project_path / d).exists() for d in ("tests", "test", "__tests__", "spec"))
+    if not has_tests:
+        (project_path / "tests").mkdir(exist_ok=True)
+        (project_path / "tests" / ".keep").write_text("")
+        console.print("[dim]  Scaffolded tests/ directory[/dim]")
+
+    # Check for LICENSE
+    if not any((project_path / f).exists() for f in ("LICENSE", "LICENSE.md")):
+        license_path = project_path / "LICENSE"
+        license_path.write_text(f"MIT License\n\nCopyright (c) {datetime.now().year}\n")
+        console.print("[dim]  Scaffolded basic LICENSE[/dim]")
 
 
 def _write_agentignore(project_path: Path) -> None:
