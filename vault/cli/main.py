@@ -267,7 +267,7 @@ def link(brain: str | None, path: str) -> None:
     agents_md = project_path / "AGENTS.md"
     template_path = Path(__file__).parent.parent / "templates" / "AGENTS.md"
 
-    generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
+    generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `{brain_path}/projects/{project_path.name}`*\n"
 
     if agents_md.exists():
         content = agents_md.read_text()
