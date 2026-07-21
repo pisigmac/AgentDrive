@@ -220,8 +220,12 @@ def link(brain: str | None, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
+        
+        # Write and stage workflow on main branch first
+        _write_github_workflow(project_path)
+        
         subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "chore: initial repository creation"],
+            ["git", "commit", "-m", "chore: initial repository creation"],
             cwd=project_path,
             capture_output=True,
         )
@@ -270,7 +274,7 @@ def link(brain: str | None, path: str) -> None:
     else:
         agents_md.write_text(f"# Agent Governance & Context{generic_text}")
 
-    # Write GitHub Workflow
+    # Ensure GitHub Workflow is written (if it wasn't already generated during init)
     _write_github_workflow(project_path)
 
     # Gitignore
@@ -409,7 +413,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_DATE=$(date +'%Y-%m-%d')
-          gh pr create --base main --head dev --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the dev sandbox into the main stable branch."
+          gh pr create --base main --head dev --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the dev sandbox into the main stable branch." || echo "PR already exists, changes will automatically appear in the open PR."
 """
 
     workflow_file = workflows_dir / "agentdrive-auto-pr.yml"
@@ -439,10 +443,11 @@ accessing this vault via MCP or direct filesystem.
 2. **Approval Gate**: Every write must be staged in `.vault/staging/` and raised as a PR.
 3. **Schema Rule**: Every markdown file MUST include frontmatter per its directory config.
 4. **Archive Rule**: Files older than threshold are moved to `.vault/archive/`. Do not delete.
-5. **Source Tag**: Every file must include `source: <provider>` in frontmatter.
+5. **Attribution Tags**: Every markdown file must include `source: <provider>` and `model: <model-name>` in frontmatter.
 6. **No Raw Secrets**: Never write API keys, tokens, or passwords into any vault file.
 7. **Cross-Reference**: Link related entries with `[[WikiLinks]]` or `related:` frontmatter.
 8. **Confidence Tag**: Mark speculative content with `confidence: low`.
+9. **Git Tracking**: When committing code, you MUST identify your model using the author flag. Example: `git commit --author="AgentDrive (Claude 3.5) <ai@agentdrive.com>"`.
 
 ## Directory Quick Reference
 | Directory | Purpose | Archive | Template |
@@ -1128,6 +1133,157 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
 
     vd = VaultDaemon(project_path, brain_path=brain_path)
     vd.run(trigger)
+
+
+@cli.command()
+@click.option("--path", default=".", help="Project path")
+def stats(path: str) -> None:
+    """Show analytics and stats for the AgentDrive brain."""
+    import os
+    import re
+    import json
+    from pathlib import Path
+    from rich.table import Table
+
+    project_path = Path(path).resolve()
+    
+    # Resolve brain path
+    brain_path = None
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            brain_path = global_config.get("active_brain")
+            if brain_path:
+                brain_path = Path(brain_path).resolve()
+            
+            if not brain_path:
+                links = global_config.get("links", {})
+                if str(project_path) in links:
+                    brain_path = Path(links[str(project_path)]).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        if (project_path / ".vault" / "config.yaml").exists():
+            brain_path = project_path / ".vault"
+        else:
+            console.print("[red]Error:[/red] No active brain or local vault found.")
+            sys.exit(1)
+
+    console.print(f"[bold]Analyzing Brain:[/bold] {brain_path}\n")
+
+    counts = {"total": 0, "sources": {}, "directories": {}, "low_confidence": 0}
+    
+    for root, dirs, files in os.walk(brain_path):
+        if ".git" in root or ".vault" in root:
+            continue
+        
+        dirname = Path(root).name
+        if dirname not in counts["directories"] and dirname != brain_path.name:
+            counts["directories"][dirname] = 0
+
+        for f in files:
+            if not f.endswith(".md"):
+                continue
+            
+            filepath = Path(root) / f
+            try:
+                content = filepath.read_text(errors="ignore")
+            except Exception:
+                continue
+
+            counts["total"] += 1
+            if dirname != brain_path.name:
+                counts["directories"][dirname] = counts["directories"].get(dirname, 0) + 1
+
+            source_match = re.search(r"^source:\s*(.+)$", content, re.MULTILINE)
+            if source_match:
+                src = source_match.group(1).strip()
+                counts["sources"][src] = counts["sources"].get(src, 0) + 1
+            else:
+                counts["sources"]["human"] = counts["sources"].get("human", 0) + 1
+                
+            conf_match = re.search(r"^confidence:\s*low", content, re.MULTILINE | re.IGNORECASE)
+            if conf_match:
+                counts["low_confidence"] += 1
+
+    table = Table(title="AgentDrive Statistics")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="magenta")
+
+    table.add_row("Total Markdown Files", str(counts["total"]))
+    table.add_row("Low Confidence Files", str(counts["low_confidence"]))
+    
+    console.print(table)
+    
+    src_table = Table(title="Contributions by Source")
+    src_table.add_column("Source", style="green")
+    src_table.add_column("Files", style="yellow")
+    for src, count in sorted(counts["sources"].items(), key=lambda x: x[1], reverse=True):
+        src_table.add_row(src, str(count))
+        
+    console.print(src_table)
+
+
+@cli.command()
+@click.option("--path", default=".", help="Project path")
+def pull(path: str) -> None:
+    """Pull global decisions and goals from the Central Brain into local context."""
+    import json
+    from pathlib import Path
+
+    project_path = Path(path).resolve()
+    
+    # Resolve brain path
+    brain_path = None
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            links = global_config.get("links", {})
+            if str(project_path) in links:
+                brain_path = Path(links[str(project_path)]).resolve()
+            elif global_config.get("active_brain"):
+                brain_path = Path(global_config.get("active_brain")).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        console.print("[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first.")
+        sys.exit(1)
+        
+    console.print(f"[bold]Pulling global context from:[/bold] {brain_path}")
+    
+    # Collect files
+    compiled_text = f"# Global Memory Context\nPulled from Central Brain: `{brain_path.name}`\n\n"
+    
+    files_pulled = 0
+    for category in ["decisions", "goals"]:
+        category_dir = brain_path / category
+        if category_dir.exists():
+            compiled_text += f"## {category.title()}\n\n"
+            for md_file in category_dir.glob("*.md"):
+                content = md_file.read_text(errors="ignore")
+                compiled_text += f"### {md_file.name}\n{content}\n\n---\n\n"
+                files_pulled += 1
+                
+    if files_pulled == 0:
+        console.print("[yellow]No decisions or goals found in the Central Brain to pull.[/yellow]")
+        return
+        
+    local_vault = project_path / ".vault"
+    local_vault.mkdir(exist_ok=True)
+    
+    dest = local_vault / "global-memory.md"
+    dest.write_text(compiled_text)
+    
+    # ensure .vault is in gitignore
+    gitignore = project_path / ".gitignore"
+    if gitignore.exists() and ".vault" not in gitignore.read_text():
+        gitignore.write_text(gitignore.read_text().rstrip() + "\n.vault/\n")
+        
+    console.print(f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]")
 
 
 if __name__ == "__main__":

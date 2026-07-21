@@ -44,4 +44,4 @@ jobs:
             --base main \
             --head dev \
             --title "🤖 Auto-PR: Agent/Memory Updates ($PR_DATE)" \
-            --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the \`dev\` sandbox into the \`main\` stable branch. Please review the changes before merging."
+            --body "This automated PR promotes the latest AI Agent code execution and/or Vault memory summaries from the \`dev\` sandbox into the \`main\` stable branch. Please review the changes before merging." || echo "PR already exists, changes will automatically appear in the open PR."
