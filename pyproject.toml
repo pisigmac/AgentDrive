@@ -28,12 +28,11 @@ dependencies = [
     "rich>=13.0",
     "gitpython>=3.1",
     "pydantic>=2.0",
-    "sentence-transformers>=2.2",
-    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0"]
+rag = ["sentence-transformers>=2.2", "numpy>=1.24"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "black>=23.0", "ruff>=0.1"]
 
 [project.scripts]
