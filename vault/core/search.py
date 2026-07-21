@@ -257,3 +257,46 @@ class VaultSearch:
 
         unique.sort(key=lambda x: x.score, reverse=True)
         return unique[:10]
+
+    def build_embeddings(self) -> None:
+        """Build and persist local vector embeddings for semantic RAG search."""
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            import json
+        except ImportError:
+            return  # The optional RAG dependencies are not installed, skip building embeddings
+            
+        model = SentenceTransformer(self.config.rag_integrations.get("local_embeddings", {}).get("model", "all-MiniLM-L6-v2"))
+        
+        texts = []
+        metadata = []
+        
+        for d in self.config.directories:
+            dir_path = Path(d.vault_path)
+            if not dir_path.exists():
+                continue
+                
+            for file in dir_path.rglob("*.md"):
+                if file.name.startswith("."):
+                    continue
+                
+                content = file.read_text(encoding="utf-8", errors="ignore")
+                
+                # Simple chunking: first 500 characters
+                snippet = content[:500].replace("\n", " ").strip()
+                if snippet:
+                    texts.append(snippet)
+                    metadata.append({"path": str(file.relative_to(self.vault_path))})
+                    
+        if not texts:
+            return
+            
+        embeddings = model.encode(texts)
+        
+        index_dir = self.vault_path / ".vault" / "index"
+        index_dir.mkdir(parents=True, exist_ok=True)
+        
+        np.save(index_dir / "embeddings.npy", embeddings)
+        with open(index_dir / "embeddings_meta.json", "w") as f:
+            json.dump(metadata, f)

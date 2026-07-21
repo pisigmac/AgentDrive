@@ -31,6 +31,12 @@ class VaultConfig:
     directories: list[DirectoryConfig] = field(default_factory=list)
     git_remote: str = ""
     providers: list[str] = field(default_factory=lambda: ["codex", "claude", "cursor", "openai"])
+    rag_integrations: dict = field(
+        default_factory=lambda: {
+            "webhook": {"enabled": False, "url": ""},
+            "local_embeddings": {"enabled": False, "model": "all-MiniLM-L6-v2"},
+        }
+    )
 
     @classmethod
     def load(cls, path: Path | str) -> VaultConfig:
@@ -53,6 +59,13 @@ class VaultConfig:
             directories=dirs,
             git_remote=data.get("git_remote", ""),
             providers=data.get("providers", ["codex", "claude", "cursor", "openai"]),
+            rag_integrations=data.get(
+                "rag_integrations",
+                {
+                    "webhook": {"enabled": False, "url": ""},
+                    "local_embeddings": {"enabled": False, "model": "all-MiniLM-L6-v2"},
+                },
+            ),
         )
 
     @classmethod

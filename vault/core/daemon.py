@@ -11,9 +11,12 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+
+from .config import VaultConfig
 
 
 class VaultDaemon:
@@ -33,6 +36,7 @@ class VaultDaemon:
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
+        self.config = VaultConfig.load(self.vault / "config.yaml")
 
     def _load_ignore_patterns(self) -> list[str]:
         ignore_file = self.project / ".agentignore"
@@ -123,6 +127,14 @@ class VaultDaemon:
 
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         print(f"[vault-daemon] {self.project.name}: {entries} entries, {elapsed:.2f}s ({trigger})")
+
+        # RAG Integrations
+        rag_config = getattr(self.config, "rag_integrations", {})
+        if rag_config.get("webhook", {}).get("enabled"):
+            self._push_webhook(rag_config["webhook"].get("url", ""))
+        
+        if rag_config.get("local_embeddings", {}).get("enabled"):
+            self._update_local_embeddings()
 
         self._maybe_rebuild_master()
 
@@ -726,6 +738,44 @@ class VaultDaemon:
         dest = self.output_dir / "infrastructure.md"
         return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — Infrastructure", "infrastructure", ["infra", "devops"], body)) else 0
 
+    def _push_webhook(self, url: str) -> None:
+        """Push harvested output to a remote webhook/Vector DB."""
+        if not url:
+            return
+        
+        files_data = []
+        for file_path in self.output_dir.glob("*.md"):
+            try:
+                files_data.append({
+                    "filename": file_path.name,
+                    "content": file_path.read_text(encoding="utf-8")
+                })
+            except Exception:
+                pass
+                
+        payload = {
+            "project": self.project.name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "context_files": files_data
+        }
+        
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=3.0)
+        except Exception:
+            pass # Fail silently so we don't break the daemon or git hooks
+
+    def _update_local_embeddings(self) -> None:
+        """Update the local RAG embedding index."""
+        try:
+            from .search import VaultSearch
+            searcher = VaultSearch(self.brain_path if self.brain_path else self.project)
+            searcher.build_embeddings()
+        except ImportError:
+            pass # Optional dependencies not installed
+        except Exception:
+            pass
 
 def install_hooks(
     project_path: Path, python_executable: str | None = None, brain_path: str | None = None
