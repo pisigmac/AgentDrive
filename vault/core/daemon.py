@@ -93,6 +93,9 @@ class VaultDaemon:
             entries += self._harvest_structure()
             entries += self._harvest_todos()
             entries += self._harvest_health()
+            entries += self._harvest_api()
+            entries += self._harvest_database()
+            entries += self._harvest_infrastructure()
 
         self.state["last_harvest"] = start.isoformat()
         self.state["last_trigger"] = trigger
@@ -674,6 +677,54 @@ class VaultDaemon:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
         return True
+
+    def _harvest_api(self) -> int:
+        api_files = ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
+        found = []
+        for f in api_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# API Specifications: {self.project.name}\n\n"
+        body += f"Found API specifications: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "api.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — API", "api", ["api", "spec"], body)) else 0
+
+    def _harvest_database(self) -> int:
+        db_files = ["schema.sql", "prisma/schema.prisma", "models.py", "migrations"]
+        found = []
+        for f in db_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# Database Schemas: {self.project.name}\n\n"
+        body += f"Found database models/schemas: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "database.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — Database", "database", ["db", "schema"], body)) else 0
+
+    def _harvest_infrastructure(self) -> int:
+        infra_files = ["docker-compose.yml", "Dockerfile", "terraform", "k8s"]
+        found = []
+        for f in infra_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# Infrastructure: {self.project.name}\n\n"
+        body += f"Found infrastructure configs: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "infrastructure.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — Infrastructure", "infrastructure", ["infra", "devops"], body)) else 0
 
 
 def install_hooks(
