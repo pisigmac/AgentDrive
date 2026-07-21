@@ -356,8 +356,26 @@ def _scaffold_project_health(project_path: Path) -> None:
         )
         console.print("[dim]  Scaffolded README.md[/dim]")
 
-    # Check for tests directory
-    has_tests = any((project_path / d).exists() for d in ("tests", "test", "__tests__", "spec"))
+    # Check for tests directory (root or 1 level deep)
+    test_names = {"tests", "test", "__tests__", "spec"}
+    skip_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"}
+    has_tests = False
+
+    for d in test_names:
+        if (project_path / d).exists():
+            has_tests = True
+            break
+
+    if not has_tests:
+        for child in project_path.iterdir():
+            if child.is_dir() and child.name not in skip_dirs and not child.name.startswith("."):
+                for d in test_names:
+                    if (child / d).exists():
+                        has_tests = True
+                        break
+            if has_tests:
+                break
+
     if not has_tests:
         (project_path / "tests").mkdir(exist_ok=True)
         (project_path / "tests" / ".keep").write_text("")

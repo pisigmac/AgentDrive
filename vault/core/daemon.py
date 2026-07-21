@@ -473,7 +473,38 @@ class VaultDaemon:
             if dirty.stdout.strip():
                 issues.append(f"{len(dirty.stdout.strip().split(chr(10)))} uncommitted file(s)")
 
-        has_tests = any((self.project / d).exists() for d in ("tests", "test", "__tests__", "spec"))
+        test_names = {"tests", "test", "__tests__", "spec"}
+        skip_dirs = {
+            ".git",
+            "node_modules",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".vault",
+            "dist",
+            "build",
+        }
+        has_tests = False
+
+        for d in test_names:
+            if (self.project / d).exists():
+                has_tests = True
+                break
+
+        if not has_tests:
+            for child in self.project.iterdir():
+                if (
+                    child.is_dir()
+                    and child.name not in skip_dirs
+                    and not child.name.startswith(".")
+                ):
+                    for d in test_names:
+                        if (child / d).exists():
+                            has_tests = True
+                            break
+                if has_tests:
+                    break
+
         if not has_tests:
             issues.append("No test directory found")
 
