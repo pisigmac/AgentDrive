@@ -109,6 +109,7 @@ def init(path: str, name: str, force: bool) -> None:
 
     # Gitignore
     _write_gitignore(vault_path)
+    _write_agentignore(vault_path)
 
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
@@ -301,14 +302,16 @@ def link(brain: str | None, path: str) -> None:
 
     # Gitignore
     _write_gitignore(project_path)
+    _write_agentignore(project_path)
 
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
+
     install_hooks(project_path, python_executable=sys.executable)
 
     global_dir = Path.home() / ".agentdrive"
     global_config_path = global_dir / "config.json"
-    
+
     global_config = {"links": {}}
     if global_config_path.exists():
         try:
@@ -318,11 +321,13 @@ def link(brain: str | None, path: str) -> None:
 
     if "links" not in global_config:
         global_config["links"] = {}
-        
+
     already_linked = str(project_path) in global_config["links"].values()
 
     if already_linked:
-        console.print(f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain.")
+        console.print(
+            f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain."
+        )
     else:
         global_config["links"][project_path.name] = str(project_path)
         global_config_path.write_text(json.dumps(global_config, indent=2))
@@ -334,6 +339,28 @@ def link(brain: str | None, path: str) -> None:
     console.print(
         "[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]"
     )
+
+
+def _write_agentignore(project_path: Path) -> None:
+    """Generate default .agentignore if it doesn't exist."""
+    agentignore_path = project_path / ".agentignore"
+    if not agentignore_path.exists():
+        template_path = Path(__file__).parent.parent / "templates" / ".agentignore"
+        if template_path.exists():
+            content = template_path.read_text()
+        else:
+            content = (
+                "# AgentDrive ignore file\n"
+                "# Directories listed here will be skipped by the vault daemon to save memory and CPU.\n\n"
+                "node_modules/\n"
+                "venv/\n"
+                ".venv/\n"
+                "dist/\n"
+                "build/\n"
+                "__pycache__/\n"
+                ".vault/\n"
+            )
+        agentignore_path.write_text(content)
 
 
 def _write_gitignore(vault_path: Path) -> None:
@@ -1308,19 +1335,22 @@ def pull(path: str) -> None:
 def push(message: str) -> None:
     """Push an instruction to all linked projects' AGENTS.md."""
     import json
+
     try:
         global_dir = Path.home() / ".agentdrive"
         global_config_path = global_dir / "config.json"
-        
+
         if not global_config_path.exists():
-            console.print("[red]Error: No Central Brain configuration found in ~/.agentdrive/config.json.[/red]")
+            console.print(
+                "[red]Error: No Central Brain configuration found in ~/.agentdrive/config.json.[/red]"
+            )
             return
-            
+
         global_config = json.loads(global_config_path.read_text())
         links = global_config.get("links", {})
-        
+
         console.print(f"[bold blue]Pushing instruction to {len(links)} projects...[/bold blue]")
-        
+
         for name, path_str in links.items():
             project_path = Path(path_str)
             agents_md = project_path / "AGENTS.md"
@@ -1332,15 +1362,15 @@ def push(message: str) -> None:
                 for line in lines:
                     if line.strip().split(".")[0].isdigit():
                         rule_number = max(rule_number, int(line.strip().split(".")[0]) + 1)
-                
+
                 new_rule = f"\n{rule_number}. **Broadcast**: {message}"
                 agents_md.write_text(content + new_rule + "\n")
                 console.print(f"[green]✓[/green] Updated {name}")
             else:
                 console.print(f"[yellow]⚠[/yellow] Skipped {name} (no AGENTS.md found)")
-                
+
         console.print("[bold green]Push complete![/bold green]")
-        
+
     except Exception as e:
         console.print(f"[red]Error pushing instruction: {e}[/red]")
         return

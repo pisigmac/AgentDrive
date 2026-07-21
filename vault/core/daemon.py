@@ -665,12 +665,20 @@ def install_hooks(
 
     # post-commit: fast — only harvest the new commit
     post_commit = hooks_dir / "post-commit"
-    post_commit.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} commit\n")
+    post_commit.write_text(
+        f"#!/bin/bash\n"
+        f"# Auto-installed by vault init\n"
+        f"nohup {cmd} commit > /dev/null 2>&1 &\n"
+    )
     post_commit.chmod(0o755)
 
     # pre-push: full harvest (git has no post-push hook)
     pre_push = hooks_dir / "pre-push"
-    pre_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
+    pre_push.write_text(
+        f"#!/bin/bash\n"
+        f"# Auto-installed by vault init\n"
+        f"nohup {cmd} push > /dev/null 2>&1 &\n"
+    )
     pre_push.chmod(0o755)
 
     print(f"[vault] Git hooks installed: {hooks_dir}")
