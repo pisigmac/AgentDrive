@@ -11,9 +11,12 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+
+from .config import VaultConfig
 
 
 class VaultDaemon:
@@ -33,6 +36,7 @@ class VaultDaemon:
         self.state_file = self.vault / ".daemon-state.json"
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
+        self.config = VaultConfig.load(self.vault / "config.yaml")
 
     def _load_ignore_patterns(self) -> list[str]:
         ignore_file = self.project / ".agentignore"
@@ -46,13 +50,14 @@ class VaultDaemon:
 
     def _is_ignored(self, path: Path) -> bool:
         import fnmatch
+
         try:
             rel_str = str(path.relative_to(self.project))
         except ValueError:
             return False
-            
+
         name = path.name
-        
+
         for pat in self.ignore_patterns:
             if fnmatch.fnmatch(rel_str, pat) or fnmatch.fnmatch(name, pat):
                 return True
@@ -92,6 +97,9 @@ class VaultDaemon:
             entries += self._harvest_structure()
             entries += self._harvest_todos()
             entries += self._harvest_health()
+            entries += self._harvest_api()
+            entries += self._harvest_database()
+            entries += self._harvest_infrastructure()
 
         self.state["last_harvest"] = start.isoformat()
         self.state["last_trigger"] = trigger
@@ -120,13 +128,26 @@ class VaultDaemon:
         elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         print(f"[vault-daemon] {self.project.name}: {entries} entries, {elapsed:.2f}s ({trigger})")
 
+        # RAG Integrations
+        rag_config = getattr(self.config, "rag_integrations", {})
+        if rag_config.get("webhook", {}).get("enabled"):
+            self._push_webhook(rag_config["webhook"].get("url", ""))
+        
+        if rag_config.get("local_embeddings", {}).get("enabled"):
+            self._update_local_embeddings()
+
         self._maybe_rebuild_master()
 
     def _maybe_rebuild_master(self) -> None:
         """Rebuild master overview if stale (>1 hour)."""
         workspace = self.project.parent
         master_state = workspace / ".vault-daemon-master.state"
-        master_output = workspace / "master-overview.md"
+
+        brain_projects = self.project / "projects"
+        if brain_projects.exists() and brain_projects.is_dir():
+            master_output = self.project / "master-overview.md"
+        else:
+            master_output = workspace / "master-overview.md"
 
         last_build = None
         if master_state.exists():
@@ -140,12 +161,21 @@ class VaultDaemon:
             return
 
         vaults = []
-        for entry in sorted(workspace.iterdir()):
-            if entry.is_dir() and not entry.name.startswith("."):
-                if (entry / ".vault" / "config.yaml").exists():
-                    vaults.append(entry)
 
-        if len(vaults) < 2:
+        # 1. If this is a Central Brain, collect all linked projects
+        brain_projects = self.project / "projects"
+        if brain_projects.exists() and brain_projects.is_dir():
+            for entry in sorted(brain_projects.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("."):
+                    vaults.append(entry)
+        else:
+            # 2. Standalone scan: look for local .vault folders
+            for entry in sorted(workspace.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("."):
+                    if (entry / ".vault" / "config.yaml").exists():
+                        vaults.append(entry)
+
+        if not vaults:
             return
 
         self._generate_master_overview(vaults, master_output)
@@ -230,16 +260,38 @@ class VaultDaemon:
             # Fallback: Guess runtime by counting file extensions in root or src
             counts = {}
             for root, dirs, files in os.walk(self.project):
-                dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"} and not d.startswith(".")]
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if d
+                    not in {
+                        ".git",
+                        "node_modules",
+                        ".venv",
+                        "venv",
+                        "__pycache__",
+                        ".vault",
+                        "dist",
+                        "build",
+                    }
+                    and not d.startswith(".")
+                ]
                 for f in files:
                     ext = Path(f).suffix
                     if ext in (".py", ".js", ".ts", ".go", ".rs", ".java"):
                         counts[ext] = counts.get(ext, 0) + 1
             if not counts:
                 return 0
-            
+
             dominant_ext = max(counts, key=counts.get)
-            ext_map = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".go": "Go", ".rs": "Rust", ".java": "Java"}
+            ext_map = {
+                ".py": "Python",
+                ".js": "JavaScript",
+                ".ts": "TypeScript",
+                ".go": "Go",
+                ".rs": "Rust",
+                ".java": "Java",
+            }
             stack["runtime"] = ext_map.get(dominant_ext, "Unknown")
 
         body = f"# Tech Stack: {self.project.name}\n\n"
@@ -275,7 +327,11 @@ class VaultDaemon:
         skip = {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"}
         lines = []
         for root, dirs, files in os.walk(found):
-            dirs[:] = [d for d in dirs if d not in skip and not self._is_ignored(Path(root) / d) and not d.startswith(".")]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in skip and not self._is_ignored(Path(root) / d) and not d.startswith(".")
+            ]
             depth = root.replace(str(found), "").count(os.sep)
             if depth > 2:
                 del dirs[:]
@@ -283,8 +339,12 @@ class VaultDaemon:
             rel = Path(root).relative_to(found)
             indent = "  " * depth
             lines.append(f"{indent}{rel}/")
-            
-            valid_files = [f for f in sorted(files) if not f.startswith(".") and not self._is_ignored(Path(root) / f)]
+
+            valid_files = [
+                f
+                for f in sorted(files)
+                if not f.startswith(".") and not self._is_ignored(Path(root) / f)
+            ]
             for f in valid_files[:20]:
                 lines.append(f"{indent}  {f}")
             if len(valid_files) > 20:
@@ -365,7 +425,11 @@ class VaultDaemon:
         todos = []
 
         for root, dirs, files in os.walk(self.project):
-            dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".") and not self._is_ignored(Path(root) / d)]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in skip and not d.startswith(".") and not self._is_ignored(Path(root) / d)
+            ]
             for f in files:
                 if self._is_ignored(Path(root) / f):
                     continue
@@ -424,7 +488,38 @@ class VaultDaemon:
             if dirty.stdout.strip():
                 issues.append(f"{len(dirty.stdout.strip().split(chr(10)))} uncommitted file(s)")
 
-        has_tests = any((self.project / d).exists() for d in ("tests", "test", "__tests__", "spec"))
+        test_names = {"tests", "test", "__tests__", "spec"}
+        skip_dirs = {
+            ".git",
+            "node_modules",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".vault",
+            "dist",
+            "build",
+        }
+        has_tests = False
+
+        for d in test_names:
+            if (self.project / d).exists():
+                has_tests = True
+                break
+
+        if not has_tests:
+            for child in self.project.iterdir():
+                if (
+                    child.is_dir()
+                    and child.name not in skip_dirs
+                    and not child.name.startswith(".")
+                ):
+                    for d in test_names:
+                        if (child / d).exists():
+                            has_tests = True
+                            break
+                if has_tests:
+                    break
+
         if not has_tests:
             issues.append("No test directory found")
 
@@ -455,7 +550,16 @@ class VaultDaemon:
         for vault in vaults:
             p: dict[str, Any] = {"name": vault.name}
 
-            summary = vault / "projects" / f"{vault.name}.md"
+            # If vault is a CentralBrain project folder (e.g. CentralBrain/projects/AgentOS), files are direct.
+            # If vault is a standalone repo (e.g. dummy/), files are in .vault/projects/
+            if (vault / "tech-stack.md").exists() or (vault / f"{vault.name}.md").exists():
+                data_dir = vault
+                commits_dir = vault.parent.parent / "commits"  # CentralBrain/commits
+            else:
+                data_dir = vault / ".vault" / "projects"
+                commits_dir = vault / ".vault" / "commits"
+
+            summary = data_dir / f"{vault.name}.md"
             if summary.exists():
                 text = summary.read_text()
                 m = re.search(r"\*\*Description:\*\*\s*(.+)", text)
@@ -466,7 +570,7 @@ class VaultDaemon:
                 p["description"] = ""
                 p["status"] = "unknown"
 
-            tech = vault / "projects" / "tech-stack.md"
+            tech = data_dir / "tech-stack.md"
             p["tech"] = []
             if tech.exists():
                 text = tech.read_text()
@@ -474,7 +578,7 @@ class VaultDaemon:
                 if m:
                     p["tech"].append(m.group(1).strip())
 
-            health = vault / "projects" / "health.md"
+            health = data_dir / "health.md"
             p["health"] = "unknown"
             p["issues"] = []
             if health.exists():
@@ -486,13 +590,12 @@ class VaultDaemon:
                     p["issues"] = re.findall(r"- ⚠️\s*(.+)", text)
 
             p["recent_commits"] = 0
-            commits_dir = vault / "commits"
             if commits_dir.exists():
                 for cf in commits_dir.glob("*.md"):
                     text = cf.read_text()
                     p["recent_commits"] += len(re.findall(r"- \*\*\[", text))
 
-            todos = vault / "projects" / "todos.md"
+            todos = data_dir / "todos.md"
             p["todo_count"] = 0
             if todos.exists():
                 text = todos.read_text()
@@ -587,6 +690,92 @@ class VaultDaemon:
         path.write_text(content)
         return True
 
+    def _harvest_api(self) -> int:
+        api_files = ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
+        found = []
+        for f in api_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# API Specifications: {self.project.name}\n\n"
+        body += f"Found API specifications: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "api.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — API", "api", ["api", "spec"], body)) else 0
+
+    def _harvest_database(self) -> int:
+        db_files = ["schema.sql", "prisma/schema.prisma", "models.py", "migrations"]
+        found = []
+        for f in db_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# Database Schemas: {self.project.name}\n\n"
+        body += f"Found database models/schemas: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "database.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — Database", "database", ["db", "schema"], body)) else 0
+
+    def _harvest_infrastructure(self) -> int:
+        infra_files = ["docker-compose.yml", "Dockerfile", "terraform", "k8s"]
+        found = []
+        for f in infra_files:
+            p = self.project / f
+            if p.exists():
+                found.append(f)
+        if not found:
+            return 0
+        
+        body = f"# Infrastructure: {self.project.name}\n\n"
+        body += f"Found infrastructure configs: {', '.join(found)}\n\n"
+        
+        dest = self.output_dir / "infrastructure.md"
+        return 1 if self._write_if_changed(dest, self._frontmatter(f"{self.project.name} — Infrastructure", "infrastructure", ["infra", "devops"], body)) else 0
+
+    def _push_webhook(self, url: str) -> None:
+        """Push harvested output to a remote webhook/Vector DB."""
+        if not url:
+            return
+        
+        files_data = []
+        for file_path in self.output_dir.glob("*.md"):
+            try:
+                files_data.append({
+                    "filename": file_path.name,
+                    "content": file_path.read_text(encoding="utf-8")
+                })
+            except Exception:
+                pass
+                
+        payload = {
+            "project": self.project.name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "context_files": files_data
+        }
+        
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=3.0)
+        except Exception:
+            pass # Fail silently so we don't break the daemon or git hooks
+
+    def _update_local_embeddings(self) -> None:
+        """Update the local RAG embedding index."""
+        try:
+            from .search import VaultSearch
+            searcher = VaultSearch(self.brain_path if self.brain_path else self.project)
+            searcher.build_embeddings()
+        except ImportError:
+            pass # Optional dependencies not installed
+        except Exception:
+            pass
 
 def install_hooks(
     project_path: Path, python_executable: str | None = None, brain_path: str | None = None
@@ -608,12 +797,20 @@ def install_hooks(
 
     # post-commit: fast — only harvest the new commit
     post_commit = hooks_dir / "post-commit"
-    post_commit.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} commit\n")
+    post_commit.write_text(
+        f"#!/bin/bash\n"
+        f"# Auto-installed by vault init\n"
+        f"nohup {cmd} commit > /dev/null 2>&1 &\n"
+    )
     post_commit.chmod(0o755)
 
     # pre-push: full harvest (git has no post-push hook)
     pre_push = hooks_dir / "pre-push"
-    pre_push.write_text(f"#!/bin/bash\n" f"# Auto-installed by vault init\n" f"{cmd} push\n")
+    pre_push.write_text(
+        f"#!/bin/bash\n"
+        f"# Auto-installed by vault init\n"
+        f"nohup {cmd} push > /dev/null 2>&1 &\n"
+    )
     pre_push.chmod(0o755)
 
     print(f"[vault] Git hooks installed: {hooks_dir}")

@@ -109,6 +109,10 @@ def init(path: str, name: str, force: bool) -> None:
 
     # Gitignore
     _write_gitignore(vault_path)
+    _write_agentignore(vault_path)
+
+    # Scaffold missing files for daemon quality
+    _scaffold_project_health(vault_path)
 
     # Initial commit
     subprocess.run(["git", "add", "-A"], cwd=vault_path, capture_output=True)
@@ -220,10 +224,10 @@ def link(brain: str | None, path: str) -> None:
         subprocess.run(["git", "init", "-b", "main"], cwd=project_path, capture_output=True)
         subprocess.run(["git", "config", "user.email", "vault@localhost"], cwd=project_path)
         subprocess.run(["git", "config", "user.name", "AgentDrive"], cwd=project_path)
-        
+
         # Write and stage workflow on main branch first
         _write_github_workflow(project_path)
-        
+
         subprocess.run(
             ["git", "commit", "-m", "chore: initial repository creation"],
             cwd=project_path,
@@ -265,41 +269,74 @@ def link(brain: str | None, path: str) -> None:
 
     # Append generic instruction to AGENTS.md
     agents_md = project_path / "AGENTS.md"
-    generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `~/.agentdrive/brains/{brain_path.name}/projects/{project_path.name}`*\n"
+    template_path = Path(__file__).parent.parent / "templates" / "AGENTS.md"
+
+    generic_text = f"\n\n---\n*Note: Global system memory is tracked securely outside this repository. Read architecture decisions from: `{brain_path}/projects/{project_path.name}`*\n"
 
     if agents_md.exists():
         content = agents_md.read_text()
         if "Global system memory is tracked securely" not in content:
-            agents_md.write_text(content.rstrip() + generic_text)
+            content = content.rstrip() + generic_text
+
+        # Ensure latest rules are present by pulling from template config
+        if template_path.exists():
+            template_content = template_path.read_text()
+            if "Error Tracking" not in content and "Error Tracking" in template_content:
+                error_rule = [
+                    line for line in template_content.splitlines() if "Error Tracking" in line
+                ][0]
+                content = content.rstrip() + f"\n{error_rule}"
+            if "Startup Scripts" not in content and "Startup Scripts" in template_content:
+                startup_rule = [
+                    line for line in template_content.splitlines() if "Startup Scripts" in line
+                ][0]
+                content = content.rstrip() + f"\n{startup_rule}"
+
+        agents_md.write_text(content)
     else:
-        agents_md.write_text(f"# Agent Governance & Context{generic_text}")
+        if template_path.exists():
+            base_content = template_path.read_text().rstrip()
+        else:
+            base_content = "# Agent Governance & Context\n\n## Rules"
+        agents_md.write_text(f"{base_content}{generic_text}")
 
     # Ensure GitHub Workflow is written (if it wasn't already generated during init)
     _write_github_workflow(project_path)
 
     # Gitignore
     _write_gitignore(project_path)
+    _write_agentignore(project_path)
+
+    # Scaffold missing files for daemon quality
+    _scaffold_project_health(project_path)
 
     # Install linked git hooks (no need to pass brain path, daemon will resolve it via config)
     from vault.core.daemon import install_hooks
 
     install_hooks(project_path, python_executable=sys.executable)
 
-    # Update Brain config
-    from vault.core.config import VaultConfig, DirectoryConfig
+    global_dir = Path.home() / ".agentdrive"
+    global_config_path = global_dir / "config.json"
 
-    brain_config = VaultConfig.load(brain_path / ".vault" / "config.yaml")
-    brain_config.directories.append(
-        DirectoryConfig(
-            **{
-                "name": project_path.name,
-                "description": f"Linked project: {project_path.name}",
-                "path": str(project_path),
-                "vault_path": str(brain_path / "projects" / project_path.name),
-            }
+    global_config = {"links": {}}
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+        except Exception:
+            pass
+
+    if "links" not in global_config:
+        global_config["links"] = {}
+
+    already_linked = str(project_path) in global_config["links"].values()
+
+    if already_linked:
+        console.print(
+            f"[yellow]⚠[/yellow] Project '{project_path.name}' is already linked to Central Brain."
         )
-    )
-    brain_config.save(brain_path / ".vault" / "config.yaml")
+    else:
+        global_config["links"][project_path.name] = str(project_path)
+        global_config_path.write_text(json.dumps(global_config, indent=2))
 
     console.print(
         "[green]✓[/green] Project successfully linked to Central Brain via ~/.agentdrive registry!"
@@ -308,6 +345,69 @@ def link(brain: str | None, path: str) -> None:
     console.print(
         "[dim]  Git hooks installed. Commits will route to the Brain automatically.[/dim]"
     )
+
+
+def _scaffold_project_health(project_path: Path) -> None:
+    """Scaffold missing files (README, LICENSE, tests/) to improve daemon harvest quality."""
+    readme = project_path / "README.md"
+    if not readme.exists():
+        readme.write_text(
+            f"# {project_path.name}\n\nWrite a short description of the project here...\n"
+        )
+        console.print("[dim]  Scaffolded README.md[/dim]")
+
+    # Check for tests directory (root or 1 level deep)
+    test_names = {"tests", "test", "__tests__", "spec"}
+    skip_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", ".vault", "dist", "build"}
+    has_tests = False
+
+    for d in test_names:
+        if (project_path / d).exists():
+            has_tests = True
+            break
+
+    if not has_tests:
+        for child in project_path.iterdir():
+            if child.is_dir() and child.name not in skip_dirs and not child.name.startswith("."):
+                for d in test_names:
+                    if (child / d).exists():
+                        has_tests = True
+                        break
+            if has_tests:
+                break
+
+    if not has_tests:
+        (project_path / "tests").mkdir(exist_ok=True)
+        (project_path / "tests" / ".keep").write_text("")
+        console.print("[dim]  Scaffolded tests/ directory[/dim]")
+
+    # Check for LICENSE
+    if not any((project_path / f).exists() for f in ("LICENSE", "LICENSE.md")):
+        license_path = project_path / "LICENSE"
+        license_path.write_text(f"MIT License\n\nCopyright (c) {datetime.now().year}\n")
+        console.print("[dim]  Scaffolded basic LICENSE[/dim]")
+
+
+def _write_agentignore(project_path: Path) -> None:
+    """Generate default .agentignore if it doesn't exist."""
+    agentignore_path = project_path / ".agentignore"
+    if not agentignore_path.exists():
+        template_path = Path(__file__).parent.parent / "templates" / ".agentignore"
+        if template_path.exists():
+            content = template_path.read_text()
+        else:
+            content = (
+                "# AgentDrive ignore file\n"
+                "# Directories listed here will be skipped by the vault daemon to save memory and CPU.\n\n"
+                "node_modules/\n"
+                "venv/\n"
+                ".venv/\n"
+                "dist/\n"
+                "build/\n"
+                "__pycache__/\n"
+                ".vault/\n"
+            )
+        agentignore_path.write_text(content)
 
 
 def _write_gitignore(vault_path: Path) -> None:
@@ -432,36 +532,12 @@ jobs:
 
 def _write_agents_md(vault_path: Path) -> None:
     """Write root AGENTS.md."""
-    content = """# AgentDrive — Agent Governance
+    template_path = Path(__file__).parent.parent / "templates" / "AGENTS.md"
+    if template_path.exists():
+        content = template_path.read_text()
+    else:
+        content = "# AgentDrive — Agent Governance\n\n## Scope\nThis AGENTS.md governs ALL AI providers..."
 
-## Scope
-This AGENTS.md governs ALL AI providers (Claude, Codex, Cursor, OpenAI, etc.)
-accessing this vault via MCP or direct filesystem.
-
-## Rules
-1. **Branch Rule**: All writes go to `dev` branch. Never commit to `main` directly.
-2. **Approval Gate**: Every write must be staged in `.vault/staging/` and raised as a PR.
-3. **Schema Rule**: Every markdown file MUST include frontmatter per its directory config.
-4. **Archive Rule**: Files older than threshold are moved to `.vault/archive/`. Do not delete.
-5. **Attribution Tags**: Every markdown file must include `source: <provider>` and `model: <model-name>` in frontmatter.
-6. **No Raw Secrets**: Never write API keys, tokens, or passwords into any vault file.
-7. **Cross-Reference**: Link related entries with `[[WikiLinks]]` or `related:` frontmatter.
-8. **Confidence Tag**: Mark speculative content with `confidence: low`.
-9. **Git Tracking**: When committing code, you MUST identify your model using the author flag. Example: `git commit --author="AgentDrive (Claude 3.5) <ai@agentdrive.com>"`.
-
-## Directory Quick Reference
-| Directory | Purpose | Archive | Template |
-|-----------|---------|---------|----------|
-| projects/ | Active work | 120d | templates/project.md |
-| people/ | Contacts | Never | templates/person.md |
-| goals/ | OKRs | 365d | templates/goal.md |
-| meetings/ | Meeting notes | 90d | templates/meeting.md |
-| decisions/ | ADRs | Never | templates/decision.md |
-| resources/ | Bookmarks | 180d | templates/resource.md |
-| experiments/ | Prototypes | 30d | templates/experiment.md |
-| threads/ | Conversations | 120d | templates/thread.md |
-| reviews/ | Retrospectives | 365d | templates/review.md |
-"""
     (vault_path / "AGENTS.md").write_text(content)
 
 
@@ -1121,8 +1197,12 @@ def daemon(project: str, trigger: str, brain: str | None) -> None:
             try:
                 global_config = json.loads(global_config_path.read_text())
                 links = global_config.get("links", {})
-                if str(project_path) in links:
-                    brain_path = Path(links[str(project_path)]).resolve()
+                if str(project_path) in links.values():
+                    # Reverse lookup
+                    for p in links.values():
+                        if str(project_path) == p:
+                            brain_path = Path(global_config.get("active_brain", "")).resolve()
+                            break
             except Exception:
                 pass
 
@@ -1146,7 +1226,7 @@ def stats(path: str) -> None:
     from rich.table import Table
 
     project_path = Path(path).resolve()
-    
+
     # Resolve brain path
     brain_path = None
     global_config_path = Path.home() / ".agentdrive" / "config.json"
@@ -1156,11 +1236,15 @@ def stats(path: str) -> None:
             brain_path = global_config.get("active_brain")
             if brain_path:
                 brain_path = Path(brain_path).resolve()
-            
+
             if not brain_path:
                 links = global_config.get("links", {})
-                if str(project_path) in links:
-                    brain_path = Path(links[str(project_path)]).resolve()
+                if str(project_path) in links.values():
+                    # Resolve from links
+                    for p_name, p_path in links.items():
+                        if p_path == str(project_path):
+                            brain_path = Path(global_config.get("active_brain", "")).resolve()
+                            break
         except Exception:
             pass
 
@@ -1174,11 +1258,11 @@ def stats(path: str) -> None:
     console.print(f"[bold]Analyzing Brain:[/bold] {brain_path}\n")
 
     counts = {"total": 0, "sources": {}, "directories": {}, "low_confidence": 0}
-    
+
     for root, dirs, files in os.walk(brain_path):
         if ".git" in root or ".vault" in root:
             continue
-        
+
         dirname = Path(root).name
         if dirname not in counts["directories"] and dirname != brain_path.name:
             counts["directories"][dirname] = 0
@@ -1186,7 +1270,7 @@ def stats(path: str) -> None:
         for f in files:
             if not f.endswith(".md"):
                 continue
-            
+
             filepath = Path(root) / f
             try:
                 content = filepath.read_text(errors="ignore")
@@ -1203,7 +1287,7 @@ def stats(path: str) -> None:
                 counts["sources"][src] = counts["sources"].get(src, 0) + 1
             else:
                 counts["sources"]["human"] = counts["sources"].get("human", 0) + 1
-                
+
             conf_match = re.search(r"^confidence:\s*low", content, re.MULTILINE | re.IGNORECASE)
             if conf_match:
                 counts["low_confidence"] += 1
@@ -1214,15 +1298,15 @@ def stats(path: str) -> None:
 
     table.add_row("Total Markdown Files", str(counts["total"]))
     table.add_row("Low Confidence Files", str(counts["low_confidence"]))
-    
+
     console.print(table)
-    
+
     src_table = Table(title="Contributions by Source")
     src_table.add_column("Source", style="green")
     src_table.add_column("Files", style="yellow")
     for src, count in sorted(counts["sources"].items(), key=lambda x: x[1], reverse=True):
         src_table.add_row(src, str(count))
-        
+
     console.print(src_table)
 
 
@@ -1234,7 +1318,7 @@ def pull(path: str) -> None:
     from pathlib import Path
 
     project_path = Path(path).resolve()
-    
+
     # Resolve brain path
     brain_path = None
     global_config_path = Path.home() / ".agentdrive" / "config.json"
@@ -1242,48 +1326,167 @@ def pull(path: str) -> None:
         try:
             global_config = json.loads(global_config_path.read_text())
             links = global_config.get("links", {})
-            if str(project_path) in links:
-                brain_path = Path(links[str(project_path)]).resolve()
+            if str(project_path) in links.values():
+                # Reverse lookup
+                for p in links.values():
+                    if str(project_path) == p:
+                        brain_path = Path(global_config.get("active_brain", "")).resolve()
             elif global_config.get("active_brain"):
                 brain_path = Path(global_config.get("active_brain")).resolve()
         except Exception:
             pass
 
     if not brain_path:
-        console.print("[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first.")
+        console.print(
+            "[red]Error:[/red] No Central Brain linked to this project. Run `vault link` first."
+        )
         sys.exit(1)
-        
+
     console.print(f"[bold]Pulling global context from:[/bold] {brain_path}")
-    
+
     # Collect files
     compiled_text = f"# Global Memory Context\nPulled from Central Brain: `{brain_path.name}`\n\n"
-    
+
     files_pulled = 0
-    for category in ["decisions", "goals"]:
+    for category in ["projects", "decisions", "goals"]:
         category_dir = brain_path / category
         if category_dir.exists():
             compiled_text += f"## {category.title()}\n\n"
-            for md_file in category_dir.glob("*.md"):
+            for md_file in category_dir.rglob("*.md"):
                 content = md_file.read_text(errors="ignore")
                 compiled_text += f"### {md_file.name}\n{content}\n\n---\n\n"
                 files_pulled += 1
-                
+
     if files_pulled == 0:
         console.print("[yellow]No decisions or goals found in the Central Brain to pull.[/yellow]")
         return
-        
+
     local_vault = project_path / ".vault"
     local_vault.mkdir(exist_ok=True)
-    
+
     dest = local_vault / "global-memory.md"
     dest.write_text(compiled_text)
-    
+
     # ensure .vault is in gitignore
     gitignore = project_path / ".gitignore"
     if gitignore.exists() and ".vault" not in gitignore.read_text():
         gitignore.write_text(gitignore.read_text().rstrip() + "\n.vault/\n")
-        
-    console.print(f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]")
+
+    console.print(
+        f"[green]✓ Successfully pulled {files_pulled} global documents into:[/green] [cyan].vault/global-memory.md[/cyan]"
+    )
+
+
+@cli.command()
+@click.argument("message", type=str)
+def push(message: str) -> None:
+    """Push an instruction to all linked projects' AGENTS.md."""
+    import json
+
+    try:
+        global_dir = Path.home() / ".agentdrive"
+        global_config_path = global_dir / "config.json"
+
+        if not global_config_path.exists():
+            console.print(
+                "[red]Error: No Central Brain configuration found in ~/.agentdrive/config.json.[/red]"
+            )
+            return
+
+        global_config = json.loads(global_config_path.read_text())
+        links = global_config.get("links", {})
+
+        console.print(f"[bold blue]Pushing instruction to {len(links)} projects...[/bold blue]")
+
+        for name, path_str in links.items():
+            project_path = Path(path_str)
+            agents_md = project_path / "AGENTS.md"
+            if agents_md.exists():
+                content = agents_md.read_text().rstrip()
+                # Determine the next rule number
+                lines = content.splitlines()
+                rule_number = 1
+                for line in lines:
+                    if line.strip().split(".")[0].isdigit():
+                        rule_number = max(rule_number, int(line.strip().split(".")[0]) + 1)
+
+                new_rule = f"\n{rule_number}. **Broadcast**: {message}"
+                agents_md.write_text(content + new_rule + "\n")
+                console.print(f"[green]✓[/green] Updated {name}")
+            else:
+                console.print(f"[yellow]⚠[/yellow] Skipped {name} (no AGENTS.md found)")
+
+        console.print("[bold green]Push complete![/bold green]")
+
+    except Exception as e:
+        console.print(f"[red]Error pushing instruction: {e}[/red]")
+        return
+
+
+@cli.command()
+@click.option("--deploy", is_flag=True, help="Deploy the UI to the active Central Brain")
+def dashboard(deploy: bool) -> None:
+    """Deploy the Central Brain Web UI."""
+    if not deploy:
+        console.print(
+            "[yellow]Use --deploy to deploy the dashboard to your Central Brain.[/yellow]"
+        )
+        return
+
+    import json
+    import shutil
+
+    global_config_path = Path.home() / ".agentdrive" / "config.json"
+    brain_path = None
+    if global_config_path.exists():
+        try:
+            global_config = json.loads(global_config_path.read_text())
+            if global_config.get("active_brain"):
+                brain_path = Path(global_config.get("active_brain")).resolve()
+        except Exception:
+            pass
+
+    if not brain_path:
+        console.print("[red]Error:[/red] No Central Brain is currently linked.")
+        sys.exit(1)
+
+    console.print(f"[bold green]Deploying Dashboard to:[/bold green] {brain_path}")
+
+    templates_dir = Path(__file__).parent.parent / "templates"
+    ui_src = templates_dir / "ui"
+    workflow_src = templates_dir / "deploy-ui.yml"
+
+    if not ui_src.exists() or not workflow_src.exists():
+        console.print("[red]Error:[/red] UI templates not found in AgentDrive installation.")
+        sys.exit(1)
+
+    ui_dest = brain_path / "ui"
+    if ui_dest.exists():
+        shutil.rmtree(ui_dest)
+    shutil.copytree(ui_src, ui_dest)
+
+    workflows_dir = brain_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(workflow_src, workflows_dir / "deploy-ui.yml")
+
+    import subprocess
+
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+    subprocess.run(
+        ["git", "add", "ui", ".github/workflows/deploy-ui.yml"], cwd=brain_path, env=clean_env
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: deploy Central Brain dashboard UI"],
+        cwd=brain_path,
+        env=clean_env,
+    )
+    subprocess.run(["git", "push", "origin", "dev"], cwd=brain_path, env=clean_env)
+
+    console.print("[bold cyan]Dashboard successfully deployed![/bold cyan]")
+    console.print(
+        "GitHub Actions is now building your dashboard. It will be available on GitHub Pages shortly."
+    )
 
 
 if __name__ == "__main__":
